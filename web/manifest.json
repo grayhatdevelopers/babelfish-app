@@ -1,6 +1,6 @@
 {
-    "name": "omni",
-    "short_name": "omni",
+    "name": "audio_recorder",
+    "short_name": "audio_recorder",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

@@ -1,0 +1,20 @@
+{
+  "buildFiles": [
+    "/Library/flutter/packages/flutter_tools/gradle/src/main/groovy/CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "/Users/aarijimam/Library/Android/sdk/cmake/3.22.1/bin/ninja",
+      "-C",
+      "/Users/aarijimam/Work/Grayhat/Babelfish-project/FlutterApp/audio_recorder/android/app/.cxx/Debug/5x6jb1c2/x86_64",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "/Users/aarijimam/Library/Android/sdk/cmake/3.22.1/bin/ninja",
+    "-C",
+    "/Users/aarijimam/Work/Grayhat/Babelfish-project/FlutterApp/audio_recorder/android/app/.cxx/Debug/5x6jb1c2/x86_64",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {}
+}

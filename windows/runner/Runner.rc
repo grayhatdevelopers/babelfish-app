@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "omni" "\0"
+            VALUE "FileDescription", "audio_recorder" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "omni" "\0"
+            VALUE "InternalName", "audio_recorder" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2025 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "omni.exe" "\0"
-            VALUE "ProductName", "omni" "\0"
+            VALUE "OriginalFilename", "audio_recorder.exe" "\0"
+            VALUE "ProductName", "audio_recorder" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
