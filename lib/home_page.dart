@@ -9,14 +9,14 @@ import 'package:audio_recorder/websocket_service.dart';
 import 'package:flutter/services.dart';
 import 'package:realtime_audio/realtime_audio.dart';
 
-class TranslationApp extends StatefulWidget {
-  const TranslationApp({super.key});
+class OldTranslationApp extends StatefulWidget {
+  const OldTranslationApp({super.key});
 
   @override
-  TranslationAppState createState() => TranslationAppState();
+  OldTranslationAppState createState() => OldTranslationAppState();
 }
 
-class TranslationAppState extends State<TranslationApp> {
+class OldTranslationAppState extends State<OldTranslationApp> {
   String targetLanguage = 'es';
   List<String> languages = ['en', 'es', 'fr', 'de', 'zh', 'ja'];
   String translatedText = '';

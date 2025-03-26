@@ -5,6 +5,12 @@
 import FlutterMacOS
 import Foundation
 
+import audioplayers_darwin
+import path_provider_foundation
+import realtime_audio
 
 func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
+  AudioplayersDarwinPlugin.register(with: registry.registrar(forPlugin: "AudioplayersDarwinPlugin"))
+  PathProviderPlugin.register(with: registry.registrar(forPlugin: "PathProviderPlugin"))
+  RealtimeAudioPlugin.register(with: registry.registrar(forPlugin: "RealtimeAudioPlugin"))
 }

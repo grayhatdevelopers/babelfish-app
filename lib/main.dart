@@ -1,16 +1,5 @@
-// ignore_for_file: avoid_print
-
-import 'dart:async';
-import 'dart:math' as math;
-
-import 'package:audio_recorder/home_page.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
-
-import 'package:audio_recorder/response_handler.dart';
-import 'package:audio_recorder/websocket_service.dart';
 import 'package:flutter/services.dart';
-import 'package:realtime_audio/realtime_audio.dart';
 
 void main() {
   runApp(const MyApp());
@@ -46,306 +35,118 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  final String title;
+class TranslationApp extends StatefulWidget {
+  const TranslationApp({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  TranslationAppState createState() => TranslationAppState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  static const _printTimeDifferences = false;
-
-  RealtimeAudio? audioEngine;
-  List<StreamSubscription<dynamic>>? _subscriptions;
-  RealtimeAudioState _state = const RealtimeAudioState();
-
-  WebsocketService? _websocketService;
-
-  double _playerVolume = -96.0;
-  double _recorderVolume = -96.0;
-
-  double get _playerVolumeT => 1.0 - (_playerVolume / -96.0).clamp(0.0, 1.0);
-  double get _recorderVolumeT =>
-      1.0 - (_recorderVolume / -96.0).clamp(0.0, 1.0);
-
-  List<Uint8List>? _previewData;
-
-  double _sampleRate = 0.0; // Default value
-
-  final String targetLanguage = "es";
-
-  void _togglePreviewRecording() {
-    if (_previewData == null) {
-      _previewData = [];
-    } else {
-      _previewData = null;
-    }
-
-    setState(() {});
-  }
-
-  //DateTime? _lastRecorderChunk;
-  DateTime? _lastPlayerChunk;
-
-  void _handleRecorderChunk(Uint8List chunk) {
-    if (_previewData == null) return;
-
-    // _previewData?.add(chunk);
-    // audioEngine?.queueChunk(chunk);
-
-    _websocketService?.sendData(_sampleRate, 'ronaldo', targetLanguage, chunk);
-  }
-
-  void _handlePlayerState(RealtimeAudioState state) {
-    if (_printTimeDifferences) {
-      if (_lastPlayerChunk != null) {
-        final diff = DateTime.now().difference(_lastPlayerChunk!);
-        print("Player time: ${diff.inMilliseconds}ms");
-      }
-      _lastPlayerChunk = DateTime.now();
-    }
-    setState(() => _state = state);
-  }
-
-  Future<void> createAudioEngine({bool recorderEnabled = false}) async {
-    final audioEngineNew = RealtimeAudio(recorderEnabled: recorderEnabled);
-    await audioEngineNew.isInitialized;
-
-    if (recorderEnabled) {
-      _websocketService = WebsocketService();
-      _websocketService?.connect('ws://6.tcp.ngrok.io:18179');
-    }
-
-    _websocketService?.sendMessage('client');
-
-    _websocketService?.startListening((message) {
-      ResponseHandler.handleReponse(message, (message) {
-        if (kDebugMode) {
-          print('Message from Server: $message');
-        }
-      }, (audioData) {
-        _previewData?.add(audioData);
-        audioEngine?.queueChunk(audioData);
-      });
-      // Handle the received message here
-    });
-
-    setState(() {
-      audioEngine = audioEngineNew;
-      _state = audioEngine!.state;
-      _sampleRate = audioEngineNew.recorderSampleRate.toDouble();
-      print("Sample rate: $_sampleRate");
-      _subscriptions = [
-        audioEngine!.stateStream.listen(_handlePlayerState),
-        audioEngine!.recorderVolumeStream
-            .listen((event) => setState(() => _recorderVolume = event)),
-        audioEngine!.playerVolumeStream
-            .listen((event) => setState(() => _playerVolume = event)),
-        audioEngine!.recorderStream.listen(_handleRecorderChunk),
-      ];
-    });
-  }
-
-  void destroyAudioEngine() {
-    for (final subscription in _subscriptions ?? const []) {
-      subscription.cancel();
-    }
-    audioEngine?.dispose();
-    audioEngine = null;
-
-    // Close WebSocket connection
-    _websocketService?.close();
-  }
-
-  Future<void> clearQueue() async {
-    final resp = await audioEngine?.clearQueue();
-    print(resp);
-    print(
-        "Stopped at: ${resp?.chunk?.elapsed}, chunk: ${resp?.chunk?.chunkElapsed}");
-  }
-
-  Future<void> testPlayer() async {
-    final file = await rootBundle.load('assets/voice.wav');
-    final data = file.buffer.asUint8List();
-    final chunks = <Uint8List>[];
-
-    const chunkSize = 24000 * 2 * 4;
-    const chunkOffset = 88;
-
-    int remaining = data.length;
-
-    while (remaining > 0) {
-      final start = chunkOffset + data.length - remaining;
-      final end = math.min(start + chunkSize, data.length);
-      final chunk = data.sublist(start, end);
-
-      assert(chunk.length % 2 == 0);
-
-      chunks.add(chunk);
-      remaining -= chunkSize;
-    }
-
-    for (final chunk in chunks) {
-      audioEngine?.queueCallback(() => print("Playing chunk."));
-      audioEngine?.queueChunk(chunk);
-      audioEngine?.queueCallback(() => print("Done playing chunk."));
-    }
-  }
-
-  Future<void> startPlayer() async => audioEngine?.start();
-  Future<void> pausePlayer() async => audioEngine?.pause();
-  Future<void> resumePlayer() async => audioEngine?.resume();
-  Future<void> stopPlayer() async => audioEngine?.stop();
-
-  Future<void> getPermission() async {
-    final permission = await RealtimeAudio.getRecordPermission();
-    print(permission);
-  }
-
-  Future<void> requestPermission() async {
-    final permission = await RealtimeAudio.requestRecordPermission();
-    print(permission);
-  }
+class TranslationAppState extends State<TranslationApp> {
+  bool isExpandedTop = false;
+  bool isExpandedBottom = false;
+  bool isWebSocketConnected = false;
+  String topLanguage = 'Français';
+  String bottomLanguage = 'Italiano';
+  double heightTop = 0;
+  double heightBottom = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      setState(() {
+        heightTop = MediaQuery.of(context).size.height * 0.5;
+        heightBottom = MediaQuery.of(context).size.height * 0.5;
+      });
+    });
   }
 
-  @override
-  void dispose() {
-    destroyAudioEngine();
-    super.dispose();
+  void _toggleSectionExpansion(isTop) {
+    setState(() {
+      isExpandedTop = isTop;
+      isExpandedBottom = !isTop;
+      MediaQuery.of(context).size.height * 1;
+      if (isExpandedTop) {
+        heightTop = MediaQuery.of(context).size.height * 1;
+        heightBottom = MediaQuery.of(context).size.height * 0;
+      } else if (isExpandedBottom) {
+        heightTop = MediaQuery.of(context).size.height * 0;
+        heightBottom = MediaQuery.of(context).size.height * 1;
+      }
+      if (isExpandedTop || isExpandedBottom) {
+        _connectWebSocket();
+      } else {
+        _disconnectWebSocket();
+      }
+    });
+  }
+
+  void _stopRecording() {
+    heightBottom = MediaQuery.of(context).size.height * 0.5;
+    heightTop = MediaQuery.of(context).size.height * 0.5;
+    _disconnectWebSocket();
+  }
+
+  void _connectWebSocket() {
+    if (!isWebSocketConnected) {
+      print("Connecting to WebSocket and starting audio engine...");
+      isWebSocketConnected = true;
+    }
+  }
+
+  void _disconnectWebSocket() {
+    if (isWebSocketConnected) {
+      print("Disconnecting WebSocket and stopping audio engine...");
+      isWebSocketConnected = false;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.title),
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: ListView(
-            clipBehavior: Clip.none,
-            children: <Widget>[
-              const SizedBox(height: 24),
-              ProgressIndicator(
-                  t: _state.duration / math.max(1, _state.durationTotal)),
-              const SizedBox(height: 16),
-              ProgressIndicator(t: _playerVolumeT),
-              const SizedBox(height: 16),
-              ProgressIndicator(t: _recorderVolumeT),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: () => createAudioEngine(recorderEnabled: true),
-                child: const Text('Create Audio Engine (With Recording)'),
-              ),
-              const SizedBox(height: 8),
-              ElevatedButton(
-                onPressed: () => createAudioEngine(recorderEnabled: false),
-                child: const Text('Create Audio Engine (Without Recording)'),
-              ),
-              const SizedBox(height: 8),
-              ElevatedButton(
-                onPressed: destroyAudioEngine,
-                child: const Text('Destroy Audio Engine'),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: startPlayer,
-                child: const Text('Start Player'),
-              ),
-              const SizedBox(height: 8),
-              ElevatedButton(
-                onPressed: stopPlayer,
-                child: const Text('Stop Player'),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: pausePlayer,
-                child: const Text('Pause Player'),
-              ),
-              const SizedBox(height: 8),
-              ElevatedButton(
-                onPressed: resumePlayer,
-                child: const Text('Resume Player'),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: testPlayer,
-                child: const Text('Queue Something'),
-              ),
-              const SizedBox(height: 8),
-              ElevatedButton(
-                onPressed: clearQueue,
-                child: const Text('Clear Queue'),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: getPermission,
-                child: const Text('Get Permission'),
-              ),
-              const SizedBox(height: 8),
-              ElevatedButton(
-                onPressed: requestPermission,
-                child: const Text('Request Permission'),
-              ),
-              const SizedBox(height: 8),
-              ElevatedButton(
-                onPressed: _togglePreviewRecording,
-                child: Text(
-                    _previewData != null ? 'End Preview' : 'Start Preview'),
-              ),
-              const SizedBox(height: 24),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class ProgressIndicator extends StatelessWidget {
-  const ProgressIndicator({
-    super.key,
-    required this.t,
-  });
-
-  final double t;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-
-    return SizedBox(
-      height: 8,
-      child: LayoutBuilder(builder: (context, constraints) {
-        return Stack(
-          alignment: AlignmentDirectional.centerStart,
+      backgroundColor: Colors.black,
+      body: GestureDetector(
+        onVerticalDragUpdate: (details) {
+          if (details.primaryDelta! > 30) {
+            _toggleSectionExpansion(true);
+          } else if (details.primaryDelta! < -30) {
+            _toggleSectionExpansion(false);
+          } else {
+            _stopRecording();
+          }
+        },
+        child: Column(
           children: [
-            Container(
-              height: double.infinity,
-              width: double.infinity,
-              decoration: ShapeDecoration(
-                  shape: const StadiumBorder(),
-                  color: colors.surfaceContainerHigh),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              height: heightTop,
+              color: Colors.blue,
+              alignment: Alignment.center,
+              child: Text(
+                topLanguage,
+                style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white),
+              ),
             ),
             AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeInOutCubicEmphasized,
-              height: double.infinity,
-              width: constraints.maxWidth * t,
-              decoration: ShapeDecoration(
-                  shape: const StadiumBorder(), color: colors.primary),
+              duration: const Duration(milliseconds: 300),
+              height: heightBottom,
+              color: Colors.green,
+              alignment: Alignment.center,
+              child: Text(
+                bottomLanguage,
+                style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white),
+              ),
             ),
           ],
-        );
-      }),
+        ),
+      ),
     );
   }
 }
