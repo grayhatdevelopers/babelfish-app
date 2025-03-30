@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_sfsymbols/flutter_sfsymbols.dart';
 
 void main() {
   runApp(const MyApp());
@@ -51,6 +52,9 @@ class TranslationAppState extends State<TranslationApp> {
   double heightTop = 0;
   double heightBottom = 0;
 
+  String translatedText = '';
+  List<String> translatedSentences = [];
+
   @override
   void initState() {
     super.initState();
@@ -66,18 +70,15 @@ class TranslationAppState extends State<TranslationApp> {
     setState(() {
       isExpandedTop = isTop;
       isExpandedBottom = !isTop;
-      MediaQuery.of(context).size.height * 1;
+
       if (isExpandedTop) {
         heightTop = MediaQuery.of(context).size.height * 1;
         heightBottom = MediaQuery.of(context).size.height * 0;
+        _connectWebSocket();
       } else if (isExpandedBottom) {
         heightTop = MediaQuery.of(context).size.height * 0;
         heightBottom = MediaQuery.of(context).size.height * 1;
-      }
-      if (isExpandedTop || isExpandedBottom) {
         _connectWebSocket();
-      } else {
-        _disconnectWebSocket();
       }
     });
   }
@@ -85,10 +86,10 @@ class TranslationAppState extends State<TranslationApp> {
   void _stopRecording() {
     heightBottom = MediaQuery.of(context).size.height * 0.5;
     heightTop = MediaQuery.of(context).size.height * 0.5;
-    _disconnectWebSocket();
+    //_disconnectWebSocket();
   }
 
-  void _connectWebSocket() {
+  void _connectWebSocket(isTop) {
     if (!isWebSocketConnected) {
       print("Connecting to WebSocket and starting audio engine...");
       isWebSocketConnected = true;
@@ -108,45 +109,125 @@ class TranslationAppState extends State<TranslationApp> {
       backgroundColor: Colors.black,
       body: GestureDetector(
         onVerticalDragUpdate: (details) {
-          if (details.primaryDelta! > 30) {
-            _toggleSectionExpansion(true);
-          } else if (details.primaryDelta! < -30) {
-            _toggleSectionExpansion(false);
-          } else {
-            _stopRecording();
-          }
+          setState(() {
+            // Adjust the heights based on the drag delta
+            heightTop += details.primaryDelta!;
+            heightBottom -= details.primaryDelta!;
+
+            // Ensure the heights stay within valid bounds
+            if (heightTop < 0) {
+              heightTop = 0;
+              heightBottom = MediaQuery.of(context).size.height;
+            } else if (heightBottom < 0) {
+              heightBottom = 0;
+              heightTop = MediaQuery.of(context).size.height;
+            }
+          });
+        },
+        onVerticalDragEnd: (details) {
+          final dragDistance =
+              heightTop - MediaQuery.of(context).size.height * 0.5;
+          final threshold = MediaQuery.of(context).size.height * 0.3;
+
+          setState(() {
+            if (dragDistance.abs() > threshold) {
+              _toggleSectionExpansion(dragDistance > 0);
+            } else {
+              // Reset to default position if drag distance is less than threshold
+              heightTop = MediaQuery.of(context).size.height * 0.5;
+              heightBottom = MediaQuery.of(context).size.height * 0.5;
+            }
+          });
         },
         child: Column(
           children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              height: heightTop,
-              color: Colors.blue,
-              alignment: Alignment.center,
-              child: Text(
-                topLanguage,
-                style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white),
-              ),
-            ),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              height: heightBottom,
-              color: Colors.green,
-              alignment: Alignment.center,
-              child: Text(
-                bottomLanguage,
-                style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white),
-              ),
-            ),
+            _topSection(),
+            _bottomSection(),
           ],
         ),
       ),
     );
+  }
+
+  Widget _topSection() {
+    return AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        height: heightTop,
+        color: Colors.blue,
+        alignment: Alignment.center,
+        child: _topLanguageIndicators());
+  }
+
+  Widget _bottomSection() {
+    return AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        height: heightBottom,
+        color: Colors.green,
+        alignment: Alignment.center,
+        child: _bottomLanguageIndicators());
+  }
+
+  Widget _topLanguageIndicators() {
+    return Opacity(
+      opacity: heightTop / MediaQuery.of(context).size.height >= 0.5
+          ? 1.0
+          : heightTop / (MediaQuery.of(context).size.height * 0.5),
+      child: Column(
+        children: [
+          Spacer(),
+          Text(
+            topLanguage,
+            style: const TextStyle(
+                fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+          ),
+          Spacer(),
+          Text(
+            'Swipe down to translate to Francais',
+            style: TextStyle(
+                fontSize: 14, fontWeight: FontWeight.w300, color: Colors.white),
+          ),
+          const Icon(
+            SFSymbols.chevron_compact_down,
+            size: 40,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _bottomLanguageIndicators() {
+    return Opacity(
+      opacity: heightBottom / MediaQuery.of(context).size.height >= 0.5
+          ? 1.0
+          : heightBottom / (MediaQuery.of(context).size.height * 0.5),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(
+            SFSymbols.chevron_compact_up,
+            size: 40,
+          ),
+          const Text(
+            'Swipe up to translate to Italian',
+            style: TextStyle(
+                fontSize: 14, fontWeight: FontWeight.w300, color: Colors.white),
+          ),
+          Spacer(),
+          Text(
+            bottomLanguage,
+            style: const TextStyle(
+                fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+          ),
+          Spacer(),
+        ],
+      ),
+    );
+  }
+
+  void _processText(String text) {
+    translatedSentences.add(text);
+    setState(() {
+      translatedText += '$text ';
+    });
   }
 }
