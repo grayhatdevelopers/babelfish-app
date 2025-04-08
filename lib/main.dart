@@ -1,6 +1,16 @@
+import 'package:audio_recorder/models/language_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_sfsymbols/flutter_sfsymbols.dart';
+
+import 'dart:async';
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
+import 'package:audio_recorder/response_handler.dart';
+import 'package:audio_recorder/websocket_service.dart';
+import 'package:flutter/services.dart';
+import 'package:realtime_audio/realtime_audio.dart';
 
 void main() {
   runApp(const MyApp());
@@ -47,13 +57,39 @@ class TranslationAppState extends State<TranslationApp> {
   bool isExpandedTop = false;
   bool isExpandedBottom = false;
   bool isWebSocketConnected = false;
-  String topLanguage = 'Français';
-  String bottomLanguage = 'Italiano';
+  String topLanguage = 'fr';
+  String bottomLanguage = 'it';
   double heightTop = 0;
   double heightBottom = 0;
 
+  String serverUrl = 'ws://13.51.35.173:8001';
+  String userID = 'ronaldo';
+
+  bool isRecording = false;
+
   String translatedText = '';
   List<String> translatedSentences = [];
+
+  RealtimeAudio? audioEngine;
+  List<StreamSubscription<dynamic>>? _subscriptions;
+  RealtimeAudioState _state = const RealtimeAudioState();
+
+  WebsocketService? _websocketService;
+
+  bool isInitialized = false;
+
+  double _playerVolume = -96.0;
+  double _recorderVolume = -96.0;
+
+  double get _playerVolumeT => 1.0 - (_playerVolume / -96.0).clamp(0.0, 1.0);
+  double get _recorderVolumeT =>
+      1.0 - (_recorderVolume / -96.0).clamp(0.0, 1.0);
+
+  List<Uint8List>? _previewData;
+
+  double _sampleRate = 0.0; // Default value
+
+  static const _printTimeDifferences = false;
 
   @override
   void initState() {
@@ -66,41 +102,10 @@ class TranslationAppState extends State<TranslationApp> {
     });
   }
 
-  void _toggleSectionExpansion(isTop) {
-    setState(() {
-      isExpandedTop = isTop;
-      isExpandedBottom = !isTop;
-
-      if (isExpandedTop) {
-        heightTop = MediaQuery.of(context).size.height * 1;
-        heightBottom = MediaQuery.of(context).size.height * 0;
-        _connectWebSocket();
-      } else if (isExpandedBottom) {
-        heightTop = MediaQuery.of(context).size.height * 0;
-        heightBottom = MediaQuery.of(context).size.height * 1;
-        _connectWebSocket();
-      }
-    });
-  }
-
-  void _stopRecording() {
-    heightBottom = MediaQuery.of(context).size.height * 0.5;
-    heightTop = MediaQuery.of(context).size.height * 0.5;
-    //_disconnectWebSocket();
-  }
-
-  void _connectWebSocket(isTop) {
-    if (!isWebSocketConnected) {
-      print("Connecting to WebSocket and starting audio engine...");
-      isWebSocketConnected = true;
-    }
-  }
-
-  void _disconnectWebSocket() {
-    if (isWebSocketConnected) {
-      print("Disconnecting WebSocket and stopping audio engine...");
-      isWebSocketConnected = false;
-    }
+  @override
+  void dispose() {
+    destroyAudioEngine();
+    super.dispose();
   }
 
   @override
@@ -133,38 +138,216 @@ class TranslationAppState extends State<TranslationApp> {
             if (dragDistance.abs() > threshold) {
               _toggleSectionExpansion(dragDistance > 0);
             } else {
-              // Reset to default position if drag distance is less than threshold
-              heightTop = MediaQuery.of(context).size.height * 0.5;
-              heightBottom = MediaQuery.of(context).size.height * 0.5;
+              _stopRecording();
             }
           });
         },
-        child: Column(
+        child: Stack(
           children: [
-            _topSection(),
-            _bottomSection(),
+            Column(
+              children: [
+                _topSection(),
+                _bottomSection(),
+              ],
+            ),
+            if (!isExpandedTop && !isExpandedBottom)
+              AnimatedPositioned(
+                duration: const Duration(
+                    milliseconds:
+                        300), // Match the sections' animation duration
+                top: heightTop - 4, // Center the 5px separator
+                left: 0,
+                right: 0,
+                child: Opacity(
+                  opacity: (1 -
+                          (((heightTop / MediaQuery.of(context).size.height) -
+                                      0.5)
+                                  .abs() *
+                              2))
+                      .clamp(0.0, 1.0),
+                  child: Container(
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[200]?.withAlpha(150) ??
+                          Colors.grey.withAlpha(150),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withAlpha(200),
+                          blurRadius: 4,
+                          spreadRadius: 0,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            Positioned(
+              top: 40,
+              right: 16,
+              child: IconButton(
+                  onPressed: _showUrlDialog, icon: Icon(Icons.settings)),
+            ),
           ],
         ),
       ),
     );
   }
 
+  void _togglePreviewRecording() {
+    if (_previewData == null) {
+      _previewData = [];
+    } else {
+      _previewData = null;
+    }
+
+    setState(() {});
+  }
+
+  void _toggleSectionExpansion(isTop) {
+    setState(() {
+      isExpandedTop = isTop;
+      isExpandedBottom = !isTop;
+
+      if (isExpandedTop) {
+        heightTop = MediaQuery.of(context).size.height * 1;
+        heightBottom = MediaQuery.of(context).size.height * 0;
+      } else if (isExpandedBottom) {
+        heightTop = MediaQuery.of(context).size.height * 0;
+        heightBottom = MediaQuery.of(context).size.height * 1;
+      }
+      if (isRecording) {
+        _toggleRecording();
+      }
+      _toggleRecording();
+    });
+  }
+
+  void _stopRecording() {
+    heightBottom = MediaQuery.of(context).size.height * 0.5;
+    heightTop = MediaQuery.of(context).size.height * 0.5;
+    isExpandedTop = false;
+    isExpandedBottom = false;
+    if (isRecording) {
+      _toggleRecording();
+    }
+  }
+
   Widget _topSection() {
-    return AnimatedContainer(
+    return GestureDetector(
+      onLongPress: () => _showLanguageSelector(true),
+      child: AnimatedContainer(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: Languages.languages[topLanguage]!.colors,
+            begin: Languages.languages[topLanguage]!.flagOrientation ==
+                    FlagOrientation.horizontal
+                ? Alignment.centerLeft
+                : Alignment.topCenter,
+            end: Languages.languages[topLanguage]!.flagOrientation ==
+                    FlagOrientation.horizontal
+                ? Alignment.centerRight
+                : Alignment.bottomCenter,
+          ),
+        ),
         duration: const Duration(milliseconds: 300),
         height: heightTop,
-        color: Colors.blue,
         alignment: Alignment.center,
-        child: _topLanguageIndicators());
+        child: isExpandedTop ? _textDisplayTop() : _topLanguageIndicators(),
+      ),
+    );
   }
 
   Widget _bottomSection() {
-    return AnimatedContainer(
+    return GestureDetector(
+      onLongPress: () => _showLanguageSelector(false),
+      child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: Languages.languages[bottomLanguage]!.colors,
+            begin: Languages.languages[bottomLanguage]!.flagOrientation ==
+                    FlagOrientation.horizontal
+                ? Alignment.centerLeft
+                : Alignment.topCenter,
+            end: Languages.languages[bottomLanguage]!.flagOrientation ==
+                    FlagOrientation.horizontal
+                ? Alignment.centerRight
+                : Alignment.bottomCenter,
+          ),
+        ),
         height: heightBottom,
-        color: Colors.green,
         alignment: Alignment.center,
-        child: _bottomLanguageIndicators());
+        child: isExpandedBottom
+            ? _textDisplayBottom()
+            : _bottomLanguageIndicators(),
+      ),
+    );
+  }
+
+  Widget _textDisplayTop() {
+    return Column(
+      children: [
+        Spacer(),
+        Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Text(
+              translatedText,
+              style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+        Spacer(),
+        Text(
+          Languages.languages[bottomLanguage]!.upText,
+          style: TextStyle(
+              fontSize: 14, fontWeight: FontWeight.w300, color: Colors.black),
+        ),
+        const Icon(
+          SFSymbols.chevron_compact_up,
+          size: 40,
+          color: Colors.black,
+        ),
+      ],
+    );
+  }
+
+  Widget _textDisplayBottom() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        SizedBox(height: 50),
+        const Icon(
+          SFSymbols.chevron_compact_down,
+          size: 40,
+          color: Colors.black,
+        ),
+        Text(
+          Languages.languages[topLanguage]!.downText,
+          style: TextStyle(
+              fontSize: 14, fontWeight: FontWeight.w300, color: Colors.black),
+        ),
+        Spacer(),
+        Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Text(
+              translatedText,
+              style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+        Spacer(),
+      ],
+    );
   }
 
   Widget _topLanguageIndicators() {
@@ -176,19 +359,20 @@ class TranslationAppState extends State<TranslationApp> {
         children: [
           Spacer(),
           Text(
-            topLanguage,
+            Languages.languages[topLanguage]!.name,
             style: const TextStyle(
-                fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+                fontSize: 36, fontWeight: FontWeight.bold, color: Colors.black),
           ),
           Spacer(),
           Text(
-            'Swipe down to translate to Francais',
+            Languages.languages[topLanguage]!.downText,
             style: TextStyle(
-                fontSize: 14, fontWeight: FontWeight.w300, color: Colors.white),
+                fontSize: 14, fontWeight: FontWeight.w300, color: Colors.black),
           ),
           const Icon(
             SFSymbols.chevron_compact_down,
             size: 40,
+            color: Colors.black,
           ),
         ],
       ),
@@ -206,21 +390,108 @@ class TranslationAppState extends State<TranslationApp> {
           const Icon(
             SFSymbols.chevron_compact_up,
             size: 40,
+            color: Colors.black,
           ),
-          const Text(
-            'Swipe up to translate to Italian',
+          Text(
+            Languages.languages[bottomLanguage]!.upText,
             style: TextStyle(
-                fontSize: 14, fontWeight: FontWeight.w300, color: Colors.white),
+                fontSize: 14, fontWeight: FontWeight.w300, color: Colors.black),
           ),
           Spacer(),
           Text(
-            bottomLanguage,
+            Languages.languages[bottomLanguage]!.name,
             style: const TextStyle(
-                fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+                fontSize: 36, fontWeight: FontWeight.bold, color: Colors.black),
           ),
           Spacer(),
         ],
       ),
+    );
+  }
+
+  // Add this method to the TranslationAppState class
+  void _showLanguageSelector(bool isTop) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext context) {
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.grey[900],
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text(
+                  'Select Language',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: Languages.languages.length,
+                  itemBuilder: (context, index) {
+                    String langCode = Languages.languages.keys.elementAt(index);
+                    LanguageModel language = Languages.languages[langCode]!;
+
+                    return ListTile(
+                      leading: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                            gradient: language.flagOrientation ==
+                                    FlagOrientation.circle
+                                ? RadialGradient(
+                                    colors: language.colors,
+                                    center: Alignment.center,
+                                    radius: 0.8,
+                                  )
+                                : LinearGradient(
+                                    colors: language.colors,
+                                    begin: language.flagOrientation ==
+                                            FlagOrientation.horizontal
+                                        ? Alignment.centerLeft
+                                        : Alignment.topCenter,
+                                    end: language.flagOrientation ==
+                                            FlagOrientation.horizontal
+                                        ? Alignment.centerRight
+                                        : Alignment.bottomCenter,
+                                  ),
+                            shape: BoxShape.rectangle,
+                            borderRadius: BorderRadius.circular(8)),
+                      ),
+                      title: Text(
+                        language.name,
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      onTap: () {
+                        setState(() {
+                          if (isTop) {
+                            topLanguage = langCode;
+                          } else {
+                            bottomLanguage = langCode;
+                          }
+                        });
+                        Navigator.pop(context);
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -229,5 +500,202 @@ class TranslationAppState extends State<TranslationApp> {
     setState(() {
       translatedText += '$text ';
     });
+  }
+
+  //DateTime? _lastRecorderChunk;
+  DateTime? _lastPlayerChunk;
+
+  void _handleRecorderChunk(Uint8List chunk) {
+    if (_previewData == null) return;
+    print('Sending chunk to server');
+    _websocketService?.sendData(_sampleRate, 'ronaldo',
+        isExpandedTop ? topLanguage : bottomLanguage, chunk);
+  }
+
+  void _handlePlayerState(RealtimeAudioState state) {
+    if (_printTimeDifferences) {
+      if (_lastPlayerChunk != null) {
+        final diff = DateTime.now().difference(_lastPlayerChunk!);
+        if (kDebugMode) {
+          print("Player time: ${diff.inMilliseconds}ms");
+        }
+      }
+      _lastPlayerChunk = DateTime.now();
+    }
+    setState(() => _state = state);
+  }
+
+  Future<void> startPlayer() async {
+    print('Starting player');
+    audioEngine?.start();
+  }
+
+  Future<void> pausePlayer() async => audioEngine?.pause();
+  Future<void> resumePlayer() async => audioEngine?.resume();
+  Future<void> stopPlayer() async => audioEngine?.stop();
+
+  Future<bool> getPermission() async {
+    final permission = await RealtimeAudio.getRecordPermission();
+    if (kDebugMode) {
+      print(permission);
+    }
+    return permission == RealtimeAudioRecordPermission.granted;
+  }
+
+  Future<void> requestPermission() async {
+    final permission = await RealtimeAudio.requestRecordPermission();
+    if (kDebugMode) {
+      print(permission);
+    }
+  }
+
+  Future<void> createAudioEngine({bool recorderEnabled = false}) async {
+    if (!await getPermission()) {
+      await requestPermission();
+    }
+    print('Creating audio engine');
+    final audioEngineNew = RealtimeAudio(recorderEnabled: recorderEnabled);
+    await audioEngineNew.isInitialized;
+
+    if (recorderEnabled) {
+      _websocketService = WebsocketService();
+      isWebSocketConnected = _websocketService?.connect(serverUrl) ?? false;
+    }
+
+    _websocketService?.sendMessage('client');
+    _websocketService?.sendMessage(userID);
+
+    _websocketService?.startListening((message) {
+      ResponseHandler.handleReponse(message, (message) {
+        if (kDebugMode) {
+          print('Message from Server: $message');
+        }
+        _processText(message);
+      }, (audioData) {
+        _previewData?.add(audioData);
+        audioEngine?.queueChunk(audioData);
+      });
+      // Handle the received message here
+    });
+
+    setState(() {
+      audioEngine = audioEngineNew;
+      _state = audioEngine!.state;
+      _sampleRate = audioEngineNew.recorderSampleRate.toDouble();
+      _subscriptions = [
+        audioEngine!.stateStream.listen(_handlePlayerState),
+        audioEngine!.recorderVolumeStream
+            .listen((event) => setState(() => _recorderVolume = event)),
+        audioEngine!.playerVolumeStream
+            .listen((event) => setState(() => _playerVolume = event)),
+        audioEngine!.recorderStream.listen(_handleRecorderChunk),
+      ];
+    });
+
+    isInitialized = true;
+  }
+
+  void destroyAudioEngine() {
+    for (final subscription in _subscriptions ?? const []) {
+      subscription.cancel();
+    }
+    audioEngine?.dispose();
+    audioEngine = null;
+
+    // Close WebSocket connection
+    _websocketService?.close();
+  }
+
+  Future<void> clearQueue() async {
+    final resp = await audioEngine?.clearQueue();
+    if (kDebugMode) {
+      print(resp);
+    }
+    if (kDebugMode) {
+      print(
+          "Stopped at: ${resp?.chunk?.elapsed}, chunk: ${resp?.chunk?.chunkElapsed}");
+    }
+  }
+
+  void _connectWebSocket() {
+    _websocketService = WebsocketService();
+    isWebSocketConnected = _websocketService?.connect(serverUrl) ?? false;
+    _websocketService?.sendMessage('client');
+    _websocketService?.sendMessage(userID);
+
+    _websocketService?.startListening((message) {
+      ResponseHandler.handleReponse(message, (message) {
+        if (kDebugMode) {
+          print('Message from Server: $message');
+        }
+        _processText(message);
+      }, (audioData) {
+        _previewData?.add(audioData);
+        audioEngine?.queueChunk(audioData);
+      });
+      // Handle the received message here
+    });
+  }
+
+  void _toggleRecording() async {
+    setState(() {
+      isRecording = !isRecording;
+    });
+    if (!isInitialized) {
+      await createAudioEngine(recorderEnabled: true);
+    }
+    if (!isWebSocketConnected) {
+      _connectWebSocket();
+    }
+    if (isRecording) {
+      startPlayer();
+      _togglePreviewRecording();
+    } else {
+      stopPlayer();
+      _togglePreviewRecording();
+    }
+  }
+
+  void _showUrlDialog() {
+    TextEditingController urlController =
+        TextEditingController(text: serverUrl);
+    TextEditingController userController = TextEditingController(text: userID);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("Enter Server URL"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: urlController,
+              decoration: InputDecoration(
+                hintText: "Enter URL here",
+                labelText: "Server URL",
+              ),
+            ),
+            TextField(
+              controller: userController,
+              decoration: InputDecoration(
+                hintText: "Enter UserID here",
+                labelText: "User ID",
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              setState(() {
+                serverUrl = urlController.text;
+                userID = userController.text;
+              });
+              Navigator.pop(context);
+            },
+            child: Text("OK"),
+          ),
+        ],
+      ),
+    );
   }
 }
