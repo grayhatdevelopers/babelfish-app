@@ -60,7 +60,8 @@ class TranslationAppState extends State<TranslationApp> {
   double heightTop = 100;
   double heightBottom = 100;
 
-  String serverUrl = 'ws://4.tcp.ngrok.io:19280';
+  String serverUrl =
+      'ws://ec2-51-21-88-102.eu-north-1.compute.amazonaws.com:8001';
   String userID = 'ronaldo';
 
   bool isRecording = false;
@@ -670,6 +671,7 @@ class TranslationAppState extends State<TranslationApp> {
       await _websocketService!.close();
       _websocketService = null;
     }
+    isInitialized = false;
   }
 
   Future<void> clearQueue() async {

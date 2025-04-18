@@ -110,7 +110,7 @@ class Languages {
     ),
     "zh-cn": LanguageModel(
       name: "中文 (简体)",
-      code: "zh-cn",
+      code: "zh",
       downText: "下滑以翻译为中文（简体）",
       upText: "上滑以翻译为中文（简体）",
       flagOrientation: FlagOrientation.circle,

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -80,7 +81,7 @@ class WebsocketService {
       }
 
       if (_channel != null) {
-        await _channel!.sink.close();
+        await _channel!.sink.close(WebSocketStatus.normalClosure);
         _channel = null;
         if (kDebugMode) {
           print("WebSocket closed");
