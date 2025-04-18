@@ -577,32 +577,65 @@ class TranslationAppState extends State<TranslationApp> {
   }
 
   Future<void> createAudioEngine({bool recorderEnabled = false}) async {
-    if (!await getPermission()) {
-      await requestPermission();
+    try {
+      if (!await getPermission()) {
+        await requestPermission();
+      }
+      if (!await getPermission()) {
+        throw Exception('Permission not granted');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to get permission. Please try again.'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      if (kDebugMode) {
+        print('Error getting permission: $e');
+      }
+      return;
     }
-
     if (await _connectWebSocket()) {
       if (kDebugMode) {
         print('Creating audio engine');
       }
-      final audioEngineNew = RealtimeAudio(recorderEnabled: recorderEnabled);
-      await audioEngineNew.isInitialized;
+      try {
+        final audioEngineNew = RealtimeAudio(recorderEnabled: recorderEnabled);
+        await audioEngineNew.isInitialized;
 
-      setState(() {
-        audioEngine = audioEngineNew;
-        _state = audioEngine!.state;
-        _sampleRate = audioEngineNew.recorderSampleRate.toDouble();
-        _subscriptions = [
-          audioEngine!.stateStream.listen(_handlePlayerState),
-          audioEngine!.recorderVolumeStream
-              .listen((event) => setState(() => _recorderVolume = event)),
-          audioEngine!.playerVolumeStream
-              .listen((event) => setState(() => _playerVolume = event)),
-          audioEngine!.recorderStream.listen(_handleRecorderChunk),
-        ];
-      });
+        setState(() {
+          audioEngine = audioEngineNew;
+          _state = audioEngine!.state;
+          _sampleRate = audioEngineNew.recorderSampleRate.toDouble();
+          _subscriptions = [
+            audioEngine!.stateStream.listen(_handlePlayerState),
+            audioEngine!.recorderVolumeStream
+                .listen((event) => setState(() => _recorderVolume = event)),
+            audioEngine!.playerVolumeStream
+                .listen((event) => setState(() => _playerVolume = event)),
+            audioEngine!.recorderStream.listen(_handleRecorderChunk),
+          ];
+        });
 
-      isInitialized = true;
+        isInitialized = true;
+      } catch (e) {
+        if (kDebugMode) {
+          print('Error creating audio engine: $e');
+        }
+        isInitialized = false;
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content:
+                  Text('Failed to initialize audio engine. Please try again.'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      }
     } else {
       isInitialized = false;
       if (mounted) {
