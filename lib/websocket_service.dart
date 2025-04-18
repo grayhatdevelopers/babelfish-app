@@ -1,42 +1,97 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
-import 'package:web_socket_channel/status.dart' as status;
 import 'dart:convert';
 
 class WebsocketService {
   WebSocketChannel? _channel;
+  bool isWebSocketConnected = false;
+  StreamSubscription? _subscription;
 
-  bool connect(String url) {
+  Future<bool> connect(String url) async {
     try {
       _channel = WebSocketChannel.connect(Uri.parse(url));
-      return true;
+      if (_channel != null) {
+        try {
+          // Add timeout to prevent hanging
+          await _channel!.ready.timeout(
+            const Duration(seconds: 3),
+            onTimeout: () {
+              throw TimeoutException('WebSocket connection timed out');
+            },
+          );
+          isWebSocketConnected = true;
+          return true;
+        } catch (e) {
+          if (kDebugMode) {
+            print("Failed to establish WebSocket connection: $e");
+          }
+          // Clean up the channel on failure
+          _channel?.sink.close();
+          _channel = null;
+          isWebSocketConnected = false;
+          return false;
+        }
+      }
+      return false;
+    } on WebSocketChannelException catch (e) {
+      if (kDebugMode) {
+        print("WebSocket connection failed: $e");
+      }
+      isWebSocketConnected = false;
+      return false;
     } catch (e) {
       if (kDebugMode) {
-        print("Failed to connect to WebSocket server: $e");
+        print("Unexpected error during WebSocket connection: $e");
       }
+      isWebSocketConnected = false;
       return false;
     }
   }
 
   void startListening(Function(dynamic) onMessageReceived) {
     if (_channel != null) {
-      _channel!.stream.listen((message) {
-        onMessageReceived(message);
-      }, onDone: () {
-        if (kDebugMode) {
-          print("Channel closed");
-        }
-      }, onError: (error) {
-        if (kDebugMode) {
-          print("Error: $error");
-        }
-      });
+      _subscription = _channel!.stream.listen(
+        (message) {
+          onMessageReceived(message);
+        },
+        onDone: () {
+          if (kDebugMode) {
+            print("Channel closed");
+          }
+          isWebSocketConnected = false;
+        },
+        onError: (error) {
+          if (kDebugMode) {
+            print("Error: $error");
+          }
+          isWebSocketConnected = false;
+        },
+      );
     }
   }
 
-  void close() {
-    if (_channel != null) {
-      _channel!.sink.close(status.goingAway);
+  Future<void> close() async {
+    try {
+      if (_subscription != null) {
+        await _subscription!.cancel();
+        _subscription = null;
+      }
+
+      if (_channel != null) {
+        await _channel!.sink.close();
+        _channel = null;
+        if (kDebugMode) {
+          print("WebSocket closed");
+        }
+      }
+
+      isWebSocketConnected = false;
+    } catch (e) {
+      if (kDebugMode) {
+        print("Error closing WebSocket: $e");
+      }
     }
   }
 

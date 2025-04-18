@@ -4,12 +4,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_sfsymbols/flutter_sfsymbols.dart';
 
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:audio_recorder/response_handler.dart';
 import 'package:audio_recorder/websocket_service.dart';
-import 'package:flutter/services.dart';
 import 'package:realtime_audio/realtime_audio.dart';
 
 void main() {
@@ -59,10 +57,10 @@ class TranslationAppState extends State<TranslationApp> {
   bool isWebSocketConnected = false;
   String topLanguage = 'fr';
   String bottomLanguage = 'it';
-  double heightTop = 0;
-  double heightBottom = 0;
+  double heightTop = 100;
+  double heightBottom = 100;
 
-  String serverUrl = 'ws://13.51.35.173:8001';
+  String serverUrl = 'ws://4.tcp.ngrok.io:19280';
   String userID = 'ronaldo';
 
   bool isRecording = false;
@@ -72,16 +70,20 @@ class TranslationAppState extends State<TranslationApp> {
 
   RealtimeAudio? audioEngine;
   List<StreamSubscription<dynamic>>? _subscriptions;
+  // ignore: unused_field
   RealtimeAudioState _state = const RealtimeAudioState();
 
   WebsocketService? _websocketService;
 
   bool isInitialized = false;
+  bool _isLayoutInitialized = false;
 
   double _playerVolume = -96.0;
   double _recorderVolume = -96.0;
 
+  // ignore: unused_element
   double get _playerVolumeT => 1.0 - (_playerVolume / -96.0).clamp(0.0, 1.0);
+  // ignore: unused_element
   double get _recorderVolumeT =>
       1.0 - (_recorderVolume / -96.0).clamp(0.0, 1.0);
 
@@ -95,10 +97,21 @@ class TranslationAppState extends State<TranslationApp> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      setState(() {
-        heightTop = MediaQuery.of(context).size.height * 0.5;
-        heightBottom = MediaQuery.of(context).size.height * 0.5;
-      });
+      if (mounted) {
+        final screenHeight = MediaQuery.of(context).size.height;
+        if (screenHeight > 0) {
+          setState(() {
+            heightTop = screenHeight * 0.5;
+            heightBottom = screenHeight * 0.5;
+          });
+        } else {
+          // Fallback to a default height if MediaQuery returns 0
+          setState(() {
+            heightTop = 300; // You can adjust this default value
+            heightBottom = 300;
+          });
+        }
+      }
     });
   }
 
@@ -110,6 +123,11 @@ class TranslationAppState extends State<TranslationApp> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_isLayoutInitialized) {
+      heightTop = MediaQuery.of(context).size.height * 0.5;
+      heightBottom = MediaQuery.of(context).size.height * 0.5;
+      _isLayoutInitialized = true;
+    }
     return Scaffold(
       backgroundColor: Colors.black,
       body: GestureDetector(
@@ -227,6 +245,8 @@ class TranslationAppState extends State<TranslationApp> {
     heightTop = MediaQuery.of(context).size.height * 0.5;
     isExpandedTop = false;
     isExpandedBottom = false;
+    translatedSentences = [];
+    translatedText = '';
     if (isRecording) {
       _toggleRecording();
     }
@@ -507,9 +527,14 @@ class TranslationAppState extends State<TranslationApp> {
 
   void _handleRecorderChunk(Uint8List chunk) {
     if (_previewData == null) return;
-    print('Sending chunk to server');
-    _websocketService?.sendData(_sampleRate, 'ronaldo',
-        isExpandedTop ? topLanguage : bottomLanguage, chunk);
+    if (kDebugMode) {
+      print('Sending chunk to server');
+    }
+    if (_websocketService != null &&
+        (_websocketService?.isWebSocketConnected ?? false)) {
+      _websocketService?.sendData(_sampleRate, 'ronaldo',
+          isExpandedTop ? topLanguage : bottomLanguage, chunk);
+    }
   }
 
   void _handlePlayerState(RealtimeAudioState state) {
@@ -526,7 +551,9 @@ class TranslationAppState extends State<TranslationApp> {
   }
 
   Future<void> startPlayer() async {
-    print('Starting player');
+    if (kDebugMode) {
+      print('Starting player');
+    }
     audioEngine?.start();
   }
 
@@ -553,57 +580,63 @@ class TranslationAppState extends State<TranslationApp> {
     if (!await getPermission()) {
       await requestPermission();
     }
-    print('Creating audio engine');
-    final audioEngineNew = RealtimeAudio(recorderEnabled: recorderEnabled);
-    await audioEngineNew.isInitialized;
 
-    if (recorderEnabled) {
-      _websocketService = WebsocketService();
-      isWebSocketConnected = _websocketService?.connect(serverUrl) ?? false;
-    }
+    if (await _connectWebSocket()) {
+      if (kDebugMode) {
+        print('Creating audio engine');
+      }
+      final audioEngineNew = RealtimeAudio(recorderEnabled: recorderEnabled);
+      await audioEngineNew.isInitialized;
 
-    _websocketService?.sendMessage('client');
-    _websocketService?.sendMessage(userID);
-
-    _websocketService?.startListening((message) {
-      ResponseHandler.handleReponse(message, (message) {
-        if (kDebugMode) {
-          print('Message from Server: $message');
-        }
-        _processText(message);
-      }, (audioData) {
-        _previewData?.add(audioData);
-        audioEngine?.queueChunk(audioData);
+      setState(() {
+        audioEngine = audioEngineNew;
+        _state = audioEngine!.state;
+        _sampleRate = audioEngineNew.recorderSampleRate.toDouble();
+        _subscriptions = [
+          audioEngine!.stateStream.listen(_handlePlayerState),
+          audioEngine!.recorderVolumeStream
+              .listen((event) => setState(() => _recorderVolume = event)),
+          audioEngine!.playerVolumeStream
+              .listen((event) => setState(() => _playerVolume = event)),
+          audioEngine!.recorderStream.listen(_handleRecorderChunk),
+        ];
       });
-      // Handle the received message here
-    });
 
-    setState(() {
-      audioEngine = audioEngineNew;
-      _state = audioEngine!.state;
-      _sampleRate = audioEngineNew.recorderSampleRate.toDouble();
-      _subscriptions = [
-        audioEngine!.stateStream.listen(_handlePlayerState),
-        audioEngine!.recorderVolumeStream
-            .listen((event) => setState(() => _recorderVolume = event)),
-        audioEngine!.playerVolumeStream
-            .listen((event) => setState(() => _playerVolume = event)),
-        audioEngine!.recorderStream.listen(_handleRecorderChunk),
-      ];
-    });
-
-    isInitialized = true;
+      isInitialized = true;
+    } else {
+      isInitialized = false;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'Failed to connect to the server. Please check your connection and try again.'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      _stopRecording();
+    }
   }
 
-  void destroyAudioEngine() {
+  Future<void> destroyAudioEngine() async {
+    // First stop the audio engine
+    await stopPlayer();
+
+    // Cancel all subscriptions
     for (final subscription in _subscriptions ?? const []) {
-      subscription.cancel();
+      await subscription.cancel();
     }
-    audioEngine?.dispose();
+    _subscriptions?.clear();
+
+    // Dispose audio engine
+    await audioEngine?.dispose();
     audioEngine = null;
 
     // Close WebSocket connection
-    _websocketService?.close();
+    if (_websocketService != null) {
+      await _websocketService!.close();
+      _websocketService = null;
+    }
   }
 
   Future<void> clearQueue() async {
@@ -617,41 +650,51 @@ class TranslationAppState extends State<TranslationApp> {
     }
   }
 
-  void _connectWebSocket() {
+  Future<bool> _connectWebSocket() async {
     _websocketService = WebsocketService();
-    isWebSocketConnected = _websocketService?.connect(serverUrl) ?? false;
-    _websocketService?.sendMessage('client');
-    _websocketService?.sendMessage(userID);
+    isWebSocketConnected = await _websocketService?.connect(serverUrl) ?? false;
+    if (_websocketService?.isWebSocketConnected ?? false) {
+      if (kDebugMode) {
+        print("WebSocket connected debug message");
+      }
+      _websocketService?.sendMessage('client');
+      _websocketService?.sendMessage(userID);
 
-    _websocketService?.startListening((message) {
-      ResponseHandler.handleReponse(message, (message) {
-        if (kDebugMode) {
-          print('Message from Server: $message');
-        }
-        _processText(message);
-      }, (audioData) {
-        _previewData?.add(audioData);
-        audioEngine?.queueChunk(audioData);
+      _websocketService?.startListening((message) {
+        ResponseHandler.handleReponse(message, (message) {
+          if (kDebugMode) {
+            print('Message from Server: $message');
+          }
+          _processText(message);
+        }, (audioData) {
+          _previewData?.add(audioData);
+          audioEngine?.queueChunk(audioData);
+        });
       });
-      // Handle the received message here
-    });
+      return true;
+    }
+    return false;
   }
 
   void _toggleRecording() async {
-    setState(() {
-      isRecording = !isRecording;
-    });
-    if (!isInitialized) {
-      await createAudioEngine(recorderEnabled: true);
-    }
-    if (!isWebSocketConnected) {
-      _connectWebSocket();
-    }
     if (isRecording) {
-      startPlayer();
+      setState(() {
+        isRecording = false;
+      });
+      await stopPlayer();
       _togglePreviewRecording();
+      await destroyAudioEngine();
     } else {
-      stopPlayer();
+      if (!isInitialized) {
+        await createAudioEngine(recorderEnabled: true);
+      }
+      if (!isWebSocketConnected) {
+        await _connectWebSocket();
+      }
+      setState(() {
+        isRecording = true;
+      });
+      await startPlayer();
       _togglePreviewRecording();
     }
   }
