@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:audio_recorder/pages/main_page.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_sound/flutter_sound.dart';
@@ -6,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:noise_meter/noise_meter.dart';
 import 'package:audio_waveforms/audio_waveforms.dart';
 import 'package:audio_recorder/models/cloning_sentences.dart';
+import '../services/voice_cloning_service.dart';
 
 class VoiceCloningScreen extends StatefulWidget {
   const VoiceCloningScreen({super.key});
@@ -22,6 +24,7 @@ class _VoiceCloningScreenState extends State<VoiceCloningScreen> {
   int _currentSentenceIndex = 0;
   String _audioFile = 'voice_cloning.aac';
   bool _isComplete = false;
+  bool _isSubmitting = false;
 
   late NoiseMeter _noiseMeter;
   StreamSubscription<NoiseReading>? _noiseSubscription;
@@ -29,6 +32,7 @@ class _VoiceCloningScreenState extends State<VoiceCloningScreen> {
   String _feedback = "Initializing...";
 
   final RecorderController _recorderController = RecorderController();
+  final VoiceCloningService _voiceCloningService = VoiceCloningService();
 
   String get _currentSentence =>
       _currentSentenceIndex < VoiceCloningSentences.sentences.length
@@ -145,10 +149,15 @@ class _VoiceCloningScreenState extends State<VoiceCloningScreen> {
         _isRecording = false;
       });
 
-      _nextSentence();
-
-      if (_isComplete) {
+      if (_currentSentenceIndex >= VoiceCloningSentences.sentences.length - 1) {
         await _audioRecorder!.stopRecorder();
+        setState(() {
+          _isComplete = true;
+          _recordingStatus = 'Voice cloning complete!';
+        });
+        await _submitVoiceCloning();
+      } else {
+        _nextSentence();
       }
     } catch (e) {
       _showErrorDialog('Failed to pause recording.');
@@ -178,6 +187,55 @@ class _VoiceCloningScreenState extends State<VoiceCloningScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _submitVoiceCloning() async {
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      final success = await _voiceCloningService.submitVoiceCloning(_audioFile);
+      if (success) {
+        _showSuccessDialog(
+            'Voice cloning submitted successfully!'); // Navigate to main page after dialog is dismissed
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const TranslationApp()),
+          );
+        }
+      }
+    } catch (e) {
+      _showErrorDialog('Failed to submit voice cloning: $e');
+    } finally {
+      setState(() {
+        _isSubmitting = false;
+      });
+    }
+  }
+
+  void _showSuccessDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Success'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _handleSkip() {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const TranslationApp()),
     );
   }
 
@@ -243,11 +301,6 @@ class _VoiceCloningScreenState extends State<VoiceCloningScreen> {
               const SizedBox(height: 20),
               if (!_isComplete) ...[
                 Text(
-                  'Decibel: ${_decibel.toStringAsFixed(2)} dB',
-                  style: const TextStyle(fontSize: 16),
-                ),
-                const SizedBox(height: 10),
-                Text(
                   _feedback,
                   style: TextStyle(
                     fontSize: 18,
@@ -293,7 +346,8 @@ class _VoiceCloningScreenState extends State<VoiceCloningScreen> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    backgroundColor: _isRecording ? Colors.red : Colors.blue,
+                    backgroundColor:
+                        _isRecording ? Colors.red : Colors.grey[700],
                   ),
                   child:
                       Text(_isRecording ? 'Stop Recording' : 'Start Recording'),
@@ -305,21 +359,39 @@ class _VoiceCloningScreenState extends State<VoiceCloningScreen> {
                   size: 64,
                 ),
                 const SizedBox(height: 20),
-                const Text(
-                  'Voice cloning complete!',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                Text(
+                  _isSubmitting
+                      ? 'Submitting voice clone...'
+                      : 'Voice cloning complete!',
+                  style: const TextStyle(
+                      fontSize: 24, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 20),
-                Text(
-                  'Recording saved as: $_audioFile',
-                  style: const TextStyle(fontSize: 16),
-                ),
+                if (_isSubmitting)
+                  const CircularProgressIndicator()
+                else
+                  Text(
+                    'Recording saved as: $_audioFile',
+                    style: const TextStyle(fontSize: 16),
+                  ),
               ],
               const SizedBox(height: 20),
               const Text(
                 'Tip: Speak clearly and maintain a consistent volume for best results.',
                 style: TextStyle(fontSize: 14, color: Colors.grey),
                 textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 20),
+              GestureDetector(
+                onTap: _handleSkip,
+                child: const Text(
+                  "Proceed without cloning voice",
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
               ),
             ],
           ),
