@@ -5,6 +5,7 @@ import 'package:flutter_sound/flutter_sound.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:noise_meter/noise_meter.dart';
 import 'package:audio_waveforms/audio_waveforms.dart';
+import 'package:audio_recorder/models/cloning_sentences.dart';
 
 class VoiceCloningScreen extends StatefulWidget {
   const VoiceCloningScreen({super.key});
@@ -18,7 +19,9 @@ class _VoiceCloningScreenState extends State<VoiceCloningScreen> {
   bool _isRecording = false;
   String _recordingStatus = 'Not Recording';
   final int _sampleRate = 44100;
-  final String _audioFilePath = 'audio_record.aac';
+  int _currentSentenceIndex = 0;
+  String _audioFile = 'voice_cloning.aac';
+  bool _isComplete = false;
 
   late NoiseMeter _noiseMeter;
   StreamSubscription<NoiseReading>? _noiseSubscription;
@@ -26,6 +29,11 @@ class _VoiceCloningScreenState extends State<VoiceCloningScreen> {
   String _feedback = "Initializing...";
 
   final RecorderController _recorderController = RecorderController();
+
+  String get _currentSentence =>
+      _currentSentenceIndex < VoiceCloningSentences.sentences.length
+          ? VoiceCloningSentences.sentences[_currentSentenceIndex]
+          : "";
 
   @override
   void initState() {
@@ -68,18 +76,38 @@ class _VoiceCloningScreenState extends State<VoiceCloningScreen> {
     }
   }
 
+  void _nextSentence() {
+    if (_currentSentenceIndex < VoiceCloningSentences.sentences.length - 1) {
+      setState(() {
+        _currentSentenceIndex++;
+        _recordingStatus = 'Ready for next sentence';
+        _feedback = "Initializing...";
+      });
+    } else {
+      setState(() {
+        _isComplete = true;
+        _recordingStatus = 'Voice cloning complete!';
+      });
+      // Here you could implement logic to send the recording to your server
+    }
+  }
+
   void _startRecording() async {
     if (_audioRecorder == null) {
       _showErrorDialog('Recorder is not initialized.');
       return;
     }
+
     try {
-      await _audioRecorder!.startRecorder(
-        toFile: _audioFilePath,
-        codec: Codec.aacADTS,
-        audioSource: AudioSource.microphone,
-        sampleRate: _sampleRate,
-      );
+      // Only start a new recording if we're at the beginning
+      if (_currentSentenceIndex == 0) {
+        await _audioRecorder!.startRecorder(
+          toFile: _audioFile,
+          codec: Codec.aacADTS,
+          audioSource: AudioSource.microphone,
+          sampleRate: _sampleRate,
+        );
+      }
 
       await _recorderController.record();
 
@@ -92,7 +120,8 @@ class _VoiceCloningScreenState extends State<VoiceCloningScreen> {
 
       setState(() {
         _isRecording = true;
-        _recordingStatus = 'Recording...';
+        _recordingStatus =
+            'Recording sentence ${_currentSentenceIndex + 1} of ${VoiceCloningSentences.sentences.length}';
       });
     } catch (e) {
       _showErrorDialog('Failed to start recording.');
@@ -103,24 +132,26 @@ class _VoiceCloningScreenState extends State<VoiceCloningScreen> {
     }
   }
 
-  void _stopRecording() async {
+  void _pauseRecording() async {
     if (_audioRecorder == null) {
       _showErrorDialog('Recorder is not initialized.');
       return;
     }
     try {
-      await _audioRecorder!.stopRecorder();
-      await _recorderController.stop();
+      await _recorderController.pause();
       _noiseSubscription?.cancel();
 
       setState(() {
         _isRecording = false;
-        _recordingStatus = 'Recording Stopped';
-        _decibel = 0.0;
-        _feedback = 'Stopped';
       });
+
+      _nextSentence();
+
+      if (_isComplete) {
+        await _audioRecorder!.stopRecorder();
+      }
     } catch (e) {
-      _showErrorDialog('Failed to stop recording.');
+      _showErrorDialog('Failed to pause recording.');
     }
   }
 
@@ -163,7 +194,7 @@ class _VoiceCloningScreenState extends State<VoiceCloningScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Babelfish'),
+        title: const Text('Voice Cloning'),
         centerTitle: true,
       ),
       body: Center(
@@ -173,67 +204,117 @@ class _VoiceCloningScreenState extends State<VoiceCloningScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[
-              Text(
-                _recordingStatus,
-                style:
-                    const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+              LinearProgressIndicator(
+                value: (_currentSentenceIndex + 1) /
+                    VoiceCloningSentences.sentences.length,
+                backgroundColor: Colors.grey[200],
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
               ),
               const SizedBox(height: 20),
               Text(
-                'Decibel: ${_decibel.toStringAsFixed(2)} dB',
-                style: const TextStyle(fontSize: 16),
+                'Sentence ${_currentSentenceIndex + 1} of ${VoiceCloningSentences.sentences.length}',
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
               ),
-              const SizedBox(height: 10),
-              Text(
-                _feedback,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: _feedback == "Too Loud"
-                      ? Colors.red
-                      : _feedback == "Too Quiet"
-                          ? Colors.orange
-                          : Colors.green,
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: _isRecording ? Colors.blue : Colors.grey.shade300,
+                    width: 2,
+                  ),
+                ),
+                child: Text(
+                  _currentSentence,
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.w500),
+                  textAlign: TextAlign.center,
                 ),
               ),
-              const SizedBox(height: 30),
-              SizedBox(
-                width: MediaQuery.of(context).size.width * 0.8,
-                height: 100,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: Container(
-                    color: Colors.grey.shade200,
-                    child: AudioWaveforms(
-                      size: Size(MediaQuery.of(context).size.width * 0.8, 100),
-                      recorderController: _recorderController,
-                      enableGesture: true,
-                      waveStyle: WaveStyle(
-                        showMiddleLine: false,
-                        waveThickness: 1.0,
-                        extendWaveform: true,
-                        waveColor: Colors.blue,
-                        spacing: 2.0,
+              const SizedBox(height: 20),
+              Text(
+                _recordingStatus,
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 20),
+              if (!_isComplete) ...[
+                Text(
+                  'Decibel: ${_decibel.toStringAsFixed(2)} dB',
+                  style: const TextStyle(fontSize: 16),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  _feedback,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: _feedback == "Too Loud"
+                        ? Colors.red
+                        : _feedback == "Too Quiet"
+                            ? Colors.orange
+                            : Colors.green,
+                  ),
+                ),
+                const SizedBox(height: 30),
+                SizedBox(
+                  width: MediaQuery.of(context).size.width * 0.8,
+                  height: 100,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      color: Colors.grey.shade200,
+                      child: AudioWaveforms(
+                        size:
+                            Size(MediaQuery.of(context).size.width * 0.8, 100),
+                        recorderController: _recorderController,
+                        enableGesture: true,
+                        waveStyle: WaveStyle(
+                          showMiddleLine: false,
+                          waveThickness: 1.0,
+                          extendWaveform: true,
+                          waveColor: Colors.blue,
+                          spacing: 2.0,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 30),
-              ElevatedButton(
-                onPressed: _isRecording ? _stopRecording : _startRecording,
-                style: ElevatedButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-                  textStyle: const TextStyle(fontSize: 18),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                const SizedBox(height: 30),
+                ElevatedButton(
+                  onPressed: _isRecording ? _pauseRecording : _startRecording,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 30, vertical: 15),
+                    textStyle: const TextStyle(fontSize: 18),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    backgroundColor: _isRecording ? Colors.red : Colors.blue,
                   ),
-                  backgroundColor: _isRecording ? Colors.red : Colors.blue,
+                  child:
+                      Text(_isRecording ? 'Stop Recording' : 'Start Recording'),
                 ),
-                child:
-                    Text(_isRecording ? 'Stop Recording' : 'Start Recording'),
-              ),
+              ] else ...[
+                const Icon(
+                  Icons.check_circle,
+                  color: Colors.green,
+                  size: 64,
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'Voice cloning complete!',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'Recording saved as: $_audioFile',
+                  style: const TextStyle(fontSize: 16),
+                ),
+              ],
               const SizedBox(height: 20),
               const Text(
                 'Tip: Speak clearly and maintain a consistent volume for best results.',
