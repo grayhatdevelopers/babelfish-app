@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:audio_recorder/pages/main_page.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import 'package:noise_meter/noise_meter.dart';
 import 'package:audio_waveforms/audio_waveforms.dart';
 import 'package:audio_recorder/models/cloning_sentences.dart';
 import '../services/voice_cloning_service.dart';
+import 'package:path_provider/path_provider.dart';
 
 class VoiceCloningScreen extends StatefulWidget {
   const VoiceCloningScreen({super.key});
@@ -22,9 +24,9 @@ class _VoiceCloningScreenState extends State<VoiceCloningScreen> {
   String _recordingStatus = 'Not Recording';
   final int _sampleRate = 44100;
   int _currentSentenceIndex = 0;
-  String _audioFile = 'voice_cloning.aac';
+  late String _audioFile; // Changed to late
   bool _isComplete = false;
-  bool _isSubmitting = false;
+  VoiceCloningState _voiceCloningState = VoiceCloningState.recording;
 
   late NoiseMeter _noiseMeter;
   StreamSubscription<NoiseReading>? _noiseSubscription;
@@ -42,7 +44,13 @@ class _VoiceCloningScreenState extends State<VoiceCloningScreen> {
   @override
   void initState() {
     super.initState();
+    _initAudioFile(); // Add this line
     _checkAndRequestPermissions();
+  }
+
+  Future<void> _initAudioFile() async {
+    final tempDir = await getTemporaryDirectory();
+    _audioFile = '${tempDir.path}/voice_cloning.aac';
   }
 
   Future<void> _checkAndRequestPermissions() async {
@@ -192,27 +200,30 @@ class _VoiceCloningScreenState extends State<VoiceCloningScreen> {
 
   Future<void> _submitVoiceCloning() async {
     setState(() {
-      _isSubmitting = true;
+      _voiceCloningState = VoiceCloningState.generating;
     });
 
     try {
       final success = await _voiceCloningService.submitVoiceCloning(_audioFile);
       if (success) {
-        _showSuccessDialog(
-            'Voice cloning submitted successfully!'); // Navigate to main page after dialog is dismissed
+        setState(() {
+          _voiceCloningState = VoiceCloningState.complete;
+        });
+        _showSuccessDialog('Voice cloning submitted successfully!');
         if (mounted) {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => const TranslationApp()),
           );
         }
+      } else {
+        throw Exception('Voice cloning failed');
       }
     } catch (e) {
-      _showErrorDialog('Failed to submit voice cloning: $e');
-    } finally {
       setState(() {
-        _isSubmitting = false;
+        _voiceCloningState = VoiceCloningState.error;
       });
+      _showErrorDialog('$e');
     }
   }
 
@@ -266,7 +277,7 @@ class _VoiceCloningScreenState extends State<VoiceCloningScreen> {
                 value: (_currentSentenceIndex + 1) /
                     VoiceCloningSentences.sentences.length,
                 backgroundColor: Colors.grey[200],
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.grey.shade700),
               ),
               const SizedBox(height: 20),
               Text(
@@ -353,26 +364,46 @@ class _VoiceCloningScreenState extends State<VoiceCloningScreen> {
                       Text(_isRecording ? 'Stop Recording' : 'Start Recording'),
                 ),
               ] else ...[
-                const Icon(
-                  Icons.check_circle,
-                  color: Colors.green,
+                Icon(
+                  _voiceCloningState == VoiceCloningState.complete
+                      ? Icons.check_circle
+                      : _voiceCloningState == VoiceCloningState.error
+                          ? Icons.error_rounded
+                          : Icons.access_time,
+                  color: _voiceCloningState == VoiceCloningState.complete
+                      ? Colors.green
+                      : _voiceCloningState == VoiceCloningState.error
+                          ? Colors.red
+                          : Colors.black,
                   size: 64,
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  _isSubmitting
+                  _voiceCloningState == VoiceCloningState.generating
                       ? 'Submitting voice clone...'
-                      : 'Voice cloning complete!',
-                  style: const TextStyle(
-                      fontSize: 24, fontWeight: FontWeight.bold),
+                      : _voiceCloningState == VoiceCloningState.error
+                          ? 'Voice cloning failed!'
+                          : 'Voice cloning complete!',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: _voiceCloningState == VoiceCloningState.error
+                        ? Colors.red
+                        : Colors.black,
+                  ),
                 ),
                 const SizedBox(height: 20),
-                if (_isSubmitting)
+                if (_voiceCloningState == VoiceCloningState.generating)
                   const CircularProgressIndicator()
-                else
-                  Text(
-                    'Recording saved as: $_audioFile',
-                    style: const TextStyle(fontSize: 16),
+                else if (_voiceCloningState == VoiceCloningState.complete)
+                  const Text(
+                    'Voice Cloned!',
+                    style: TextStyle(fontSize: 16),
+                  )
+                else if (_voiceCloningState == VoiceCloningState.error)
+                  const Text(
+                    'Please try again',
+                    style: TextStyle(fontSize: 16, color: Colors.red),
                   ),
               ],
               const SizedBox(height: 20),

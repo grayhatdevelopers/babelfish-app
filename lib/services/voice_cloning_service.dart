@@ -21,10 +21,13 @@ class VoiceCloningService {
       if (response.statusCode >= 200 && response.statusCode < 300) {
         return true;
       } else {
-        throw APIError('Failed to submit voice cloning: ${response.statusCode}');
+        throw APIError(
+            'Failed to submit voice cloning: ${response.statusCode}');
       }
     } catch (e) {
-      throw APIError('Voice cloning submission failed: $e');
+      throw ('$e');
     }
   }
 }
+
+enum VoiceCloningState { recording, generating, complete, error }

@@ -29,7 +29,7 @@ class FileError implements Exception {
 }
 
 class OmniAPI {
-  String baseUrl = '"http://34.31.82.234:8800"';
+  String baseUrl = 'http://34.31.82.234:8800';
   final Map<String, String> headers;
 
   OmniAPI({
@@ -43,6 +43,7 @@ Future<(Uint8List, http.Response)> postVoiceClone({
   required OmniAPI endpoint,
   required String filePath,
   required String uuid,
+  Duration timeout = const Duration(seconds: 10),
 }) async {
   try {
     final file = File(filePath);
@@ -73,9 +74,21 @@ Future<(Uint8List, http.Response)> postVoiceClone({
     // Add user_id parameter
     request.fields['user_id'] = uuid;
 
-    // Send the request
-    final streamedResponse = await request.send();
-    final response = await http.Response.fromStream(streamedResponse);
+    // Send the request with timeout
+    final streamedResponse = await request.send().timeout(
+      timeout,
+      onTimeout: () {
+        throw APIError('Request timed out after ${timeout.inSeconds} seconds');
+      },
+    );
+
+    final response = await http.Response.fromStream(streamedResponse).timeout(
+      timeout,
+      onTimeout: () {
+        throw APIError(
+            'Response processing timed out after ${timeout.inSeconds} seconds');
+      },
+    );
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return (Uint8List.fromList(response.bodyBytes), response);
@@ -87,6 +100,6 @@ Future<(Uint8List, http.Response)> postVoiceClone({
   } on APIError {
     rethrow;
   } catch (e) {
-    throw APIError('Unexpected error: $e');
+    throw APIError.unknown();
   }
 }
