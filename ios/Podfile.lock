@@ -1,7 +1,15 @@
 PODS:
+  - audio_streamer (0.0.1):
+    - Flutter
+  - audio_waveforms (0.0.1):
+    - Flutter
   - audioplayers_darwin (0.0.1):
     - Flutter
   - Flutter (1.0.0)
+  - flutter_sound (9.28.0):
+    - Flutter
+    - flutter_sound_core (= 9.28.0)
+  - flutter_sound_core (9.28.0)
   - path_provider_foundation (0.0.1):
     - Flutter
     - FlutterMacOS
@@ -11,17 +19,30 @@ PODS:
     - Flutter
 
 DEPENDENCIES:
+  - audio_streamer (from `.symlinks/plugins/audio_streamer/ios`)
+  - audio_waveforms (from `.symlinks/plugins/audio_waveforms/ios`)
   - audioplayers_darwin (from `.symlinks/plugins/audioplayers_darwin/ios`)
   - Flutter (from `Flutter`)
+  - flutter_sound (from `.symlinks/plugins/flutter_sound/ios`)
   - path_provider_foundation (from `.symlinks/plugins/path_provider_foundation/darwin`)
   - permission_handler_apple (from `.symlinks/plugins/permission_handler_apple/ios`)
   - realtime_audio (from `.symlinks/plugins/realtime_audio/ios`)
 
+SPEC REPOS:
+  trunk:
+    - flutter_sound_core
+
 EXTERNAL SOURCES:
+  audio_streamer:
+    :path: ".symlinks/plugins/audio_streamer/ios"
+  audio_waveforms:
+    :path: ".symlinks/plugins/audio_waveforms/ios"
   audioplayers_darwin:
     :path: ".symlinks/plugins/audioplayers_darwin/ios"
   Flutter:
     :path: Flutter
+  flutter_sound:
+    :path: ".symlinks/plugins/flutter_sound/ios"
   path_provider_foundation:
     :path: ".symlinks/plugins/path_provider_foundation/darwin"
   permission_handler_apple:
@@ -30,8 +51,12 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/realtime_audio/ios"
 
 SPEC CHECKSUMS:
+  audio_streamer: 2e472b9f81cec5e381c4cf7667afa3055dcb45a4
+  audio_waveforms: a6dde7fe7c0ea05f06ffbdb0f7c1b2b2ba6cedcf
   audioplayers_darwin: ccf9c770ee768abb07e26d90af093f7bab1c12ab
   Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
+  flutter_sound: b9236a5875299aaa4cef1690afd2f01d52a3f890
+  flutter_sound_core: 427465f72d07ab8c3edbe8ffdde709ddacd3763c
   path_provider_foundation: 080d55be775b7414fd5a5ef3ac137b97b097e564
   permission_handler_apple: 4ed2196e43d0651e8ff7ca3483a069d469701f2d
   realtime_audio: d0bffd96e27c50ddb87f603e7ed118a3ee12368e
