@@ -34,6 +34,27 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
 
   @override
+  void initState() {
+    super.initState();
+    _checkStoredCredentials();
+  }
+
+  Future<void> _checkStoredCredentials() async {
+    final (email, password) = await StorageService.getCredentials();
+
+    if (email != null && password != null) {
+      setState(() {
+        _loginEmailController.text = email;
+        _loginPasswordController.text = password;
+        _isLoading = true;
+      });
+
+      // Attempt auto-signin
+      _executeOption(true);
+    }
+  }
+
+  @override
   void dispose() {
     _loginEmailController.dispose();
     _loginPasswordController.dispose();
@@ -167,6 +188,12 @@ class _LoginScreenState extends State<LoginScreen> {
           response.language,
         );
 
+        // Save credentials separately
+        await StorageService.saveCredentials(
+          _loginEmailController.text,
+          _loginPasswordController.text,
+        );
+
         if (mounted) {
           // Show success message
           ScaffoldMessenger.of(context).showSnackBar(
@@ -203,6 +230,12 @@ class _LoginScreenState extends State<LoginScreen> {
           response.accessToken,
           response.embeddingsExist,
           response.language,
+        );
+
+        // Save credentials separately
+        await StorageService.saveCredentials(
+          _signupEmailController.text,
+          _signupPasswordController.text,
         );
 
         if (mounted) {

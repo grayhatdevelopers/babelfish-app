@@ -1,5 +1,5 @@
 class OmniAPI {
-  String baseUrl = 'http://localhost:8081';
+  String baseUrl = 'https://4988-203-82-54-66.ngrok-free.app';
   final Map<String, String> headers;
 
   OmniAPI({

@@ -183,7 +183,7 @@ class TranslationAppState extends State<TranslationApp> {
               top: 40,
               right: 16,
               child: IconButton(
-                  onPressed: _showUrlDialog, icon: Icon(Icons.settings)),
+                  onPressed: _showSettingsDialog, icon: Icon(Icons.settings)),
             ),
           ],
         ),
@@ -712,14 +712,14 @@ class TranslationAppState extends State<TranslationApp> {
     }
   }
 
-  void _showUrlDialog() {
+  void _showSettingsDialog() {
     TextEditingController urlController =
         TextEditingController(text: serverUrl);
     TextEditingController userController = TextEditingController(text: userID);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text("Enter Server URL"),
+        title: Text("Settings"),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -735,6 +735,29 @@ class TranslationAppState extends State<TranslationApp> {
               decoration: InputDecoration(
                 hintText: "Enter UserID here",
                 labelText: "User ID",
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () async {
+                await StorageService.deleteToken();
+                await StorageService.deleteCredentials();
+                if (mounted) {
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(
+                        builder: (context) => const LoginScreen()),
+                    (route) => false,
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                minimumSize: const Size(double.infinity, 40),
+              ),
+              child: const Text(
+                'Logout',
+                style: TextStyle(color: Colors.white),
               ),
             ),
           ],
