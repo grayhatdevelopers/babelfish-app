@@ -15,10 +15,10 @@ class VoiceCloningScreen extends StatefulWidget {
   const VoiceCloningScreen({super.key});
 
   @override
-  _VoiceCloningScreenState createState() => _VoiceCloningScreenState();
+  VoiceCloningScreenState createState() => VoiceCloningScreenState();
 }
 
-class _VoiceCloningScreenState extends State<VoiceCloningScreen> {
+class VoiceCloningScreenState extends State<VoiceCloningScreen> {
   FlutterSoundRecorder? _audioRecorder;
   bool _isRecording = false;
   String _recordingStatus = 'Not Recording';
@@ -183,17 +183,11 @@ class _VoiceCloningScreenState extends State<VoiceCloningScreen> {
   }
 
   void _showErrorDialog(String message) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Error'),
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
         content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
+        backgroundColor: Colors.red,
+        duration: Duration(seconds: 3),
       ),
     );
   }
