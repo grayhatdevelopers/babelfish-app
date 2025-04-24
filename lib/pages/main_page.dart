@@ -28,8 +28,7 @@ class TranslationAppState extends State<TranslationApp> {
   double heightTop = 100;
   double heightBottom = 100;
 
-  String serverUrl =
-      'ws://ec2-13-50-56-128.eu-north-1.compute.amazonaws.com:8001/ws/client';
+  String serverUrl = 'ws://b206-119-156-232-132.ngrok-free.app/ws/client';
   String? userID = 'ronaldo'; // Changed to nullable
   String? tokenJWT = ''; // Changed to nullable
 
@@ -58,10 +57,13 @@ class TranslationAppState extends State<TranslationApp> {
       1.0 - (_recorderVolume / -96.0).clamp(0.0, 1.0);
 
   List<Uint8List>? _previewData;
+  List<Uint8List>? _recordedData = [];
 
   double _sampleRate = 0.0; // Default value
 
   static const _printTimeDifferences = false;
+
+  bool isPlaying = false;
 
   @override
   void initState() {
@@ -681,13 +683,33 @@ class TranslationAppState extends State<TranslationApp> {
           }
           _processText(message);
         }, (audioData) {
-          _previewData?.add(audioData);
-          audioEngine?.queueChunk(audioData);
+          if (isPlaying) {
+            _previewData?.add(audioData);
+            audioEngine?.queueChunk(audioData);
+          } else {
+            _recordedData?.add(audioData);
+          }
         });
       });
       return true;
     }
     return false;
+  }
+
+  void _toggleRecordingandPlayback() {
+    setState(() {
+      _toggleRecording();
+      if (!isPlaying) {
+        setState(() {
+          isPlaying = true;
+          _recordedData?.forEach((data) => _previewData?.add(data));
+          _recordedData?.forEach((data) => audioEngine?.queueChunk(data));
+        });
+      } else {
+        isPlaying = false;
+        _previewData?.clear();
+      }
+    });
   }
 
   void _toggleRecording() async {
