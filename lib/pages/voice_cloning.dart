@@ -197,7 +197,7 @@ class VoiceCloningScreenState extends State<VoiceCloningScreen> {
     });
 
     try {
-      final success = await _voiceCloningService.submitVoiceCloning(_audioFile);
+      final success = await VoiceCloningService.submitVoiceCloning(_audioFile);
       if (success) {
         setState(() {
           _voiceCloningState = VoiceCloningState.complete;

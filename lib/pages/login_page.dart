@@ -26,6 +26,7 @@ class _LoginScreenState extends State<LoginScreen> {
       TextEditingController();
   final TextEditingController _signupUsernameController =
       TextEditingController();
+  final TextEditingController _baseUrlController = TextEditingController();
   String _selectedLanguage =
       Languages.languages.values.first.code; // Default language
 
@@ -37,6 +38,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     _checkStoredCredentials();
+    _loadSavedUrl();
   }
 
   Future<void> _checkStoredCredentials() async {
@@ -54,6 +56,63 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> _loadSavedUrl() async {
+    setState(() {
+      _baseUrlController.text = OmniAPI.baseUrl;
+    });
+  }
+
+  void _showApiSettingsDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('API Settings'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _baseUrlController,
+              decoration: const InputDecoration(
+                labelText: 'Base URL',
+                hintText: 'Enter API base URL',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Current URL: ${OmniAPI.baseUrl}',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              OmniAPI.baseUrl = _baseUrlController.text;
+              if (mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('API URL updated successfully'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _loginEmailController.dispose();
@@ -69,6 +128,17 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: _showApiSettingsDialog,
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: Center(
           child: Column(
         mainAxisAlignment: MainAxisAlignment.center,

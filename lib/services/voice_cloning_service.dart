@@ -3,11 +3,7 @@ import 'package:audio_recorder/services/storage_service.dart';
 import '../services/api_service.dart';
 
 class VoiceCloningService {
-  final OmniAPI _api;
-
-  VoiceCloningService() : _api = OmniAPI();
-
-  Future<bool> submitVoiceCloning(String audioFilePath) async {
+  static Future<bool> submitVoiceCloning(String audioFilePath) async {
     try {
       final username = await StorageService.getUsername();
       if (username == null) {
@@ -15,7 +11,6 @@ class VoiceCloningService {
       }
 
       final (audioData, response) = await postVoiceClone(
-        endpoint: _api,
         filePath: audioFilePath,
         uuid: username, // Using username instead of UUID
       );

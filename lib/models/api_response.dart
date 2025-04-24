@@ -1,14 +1,14 @@
 class OmniAPI {
-  String baseUrl = 'https://4988-203-82-54-66.ngrok-free.app';
+  static String baseUrl = 'https://4988-203-82-54-66.ngrok-free.app';
   final Map<String, String> headers;
 
   OmniAPI({
     this.headers = const {'Content-Type': 'application/json'},
   });
 
-  Uri get voiceCloneEndpoint => Uri.parse('$baseUrl/upload-wav/');
-  Uri get signupEndpoint => Uri.parse('$baseUrl/auth/signup');
-  Uri get loginEndpoint => Uri.parse('$baseUrl/auth/login');
+  static Uri get voiceCloneEndpoint => Uri.parse('$baseUrl/upload-wav/');
+  static Uri get signupEndpoint => Uri.parse('$baseUrl/auth/signup');
+  static get loginEndpoint => Uri.parse('$baseUrl/auth/login');
 }
 
 class AuthResponse {

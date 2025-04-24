@@ -8,7 +8,6 @@ import 'package:http_parser/http_parser.dart';
 import 'dart:convert';
 
 Future<(Uint8List, http.Response)> postVoiceClone({
-  required OmniAPI endpoint,
   required String filePath,
   required String uuid,
   Duration timeout = const Duration(seconds: 10),
@@ -24,7 +23,7 @@ Future<(Uint8List, http.Response)> postVoiceClone({
     final mimeType = 'audio/wav';
     final boundary = 'Boundary-${DateTime.now().millisecondsSinceEpoch}';
 
-    final request = http.MultipartRequest('POST', endpoint.voiceCloneEndpoint)
+    final request = http.MultipartRequest('POST', OmniAPI.voiceCloneEndpoint)
       ..headers.addAll({
         'Content-Type': 'multipart/form-data; boundary=$boundary',
       });
@@ -77,7 +76,7 @@ Future<SignupResponse> signup({
   Duration timeout = const Duration(seconds: 10),
 }) async {
   try {
-    final Uri signupEndpoint = OmniAPI().signupEndpoint;
+    final Uri signupEndpoint = OmniAPI.signupEndpoint;
     final response = await http
         .post(
           signupEndpoint,
@@ -108,7 +107,7 @@ Future<LoginResponse> login({
   Duration timeout = const Duration(seconds: 10),
 }) async {
   try {
-    final Uri loginEndpoint = OmniAPI().loginEndpoint;
+    final Uri loginEndpoint = OmniAPI.loginEndpoint;
     final response = await http
         .post(
           loginEndpoint,
