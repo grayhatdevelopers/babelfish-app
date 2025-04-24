@@ -33,7 +33,6 @@ class VoiceCloningScreenState extends State<VoiceCloningScreen> {
   String _feedback = "Initializing...";
 
   final RecorderController _recorderController = RecorderController();
-  final VoiceCloningService _voiceCloningService = VoiceCloningService();
 
   String get _currentSentence =>
       _currentSentenceIndex < VoiceCloningSentences.sentences.length
