@@ -153,7 +153,7 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       if (isLogin) {
         final loginRequest = LoginRequest(
-          username: _loginEmailController.text,
+          email: _loginEmailController.text,
           password: _loginPasswordController.text,
         );
 
