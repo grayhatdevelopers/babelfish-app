@@ -1,1 +1,26 @@
-flutter/ephemeral
+# Flutter/Dart specific
+flutter/ephemeral/
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# Linux specific
+*.o
+*.so
+*.a
+*.dll
+*.dylib
+*.exe
+*.out
+*.app
+
+# IDE specific
+.idea/
+.vscode/
+*.swp
+*~
+
+# Build artifacts
+cmake-build-*/
