@@ -1,44 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:audio_recorder/models/api_response.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
 import 'package:http_parser/http_parser.dart';
-
-class APIError implements Exception {
-  final int? statusCode;
-  final String message;
-
-  APIError(this.message, [this.statusCode]);
-
-  static APIError unknown() => APIError('Unknown error occurred');
-  static APIError errorCode(int code) => APIError('Error code: $code', code);
-
-  @override
-  String toString() =>
-      'APIError: $message${statusCode != null ? ' (Status: $statusCode)' : ''}';
-}
-
-class FileError implements Exception {
-  final String message;
-  FileError(this.message);
-
-  static FileError readingError() => FileError('Error reading file');
-
-  @override
-  String toString() => 'FileError: $message';
-}
-
-class OmniAPI {
-  String baseUrl =
-      'http://ec2-13-50-56-128.eu-north-1.compute.amazonaws.com:8000';
-  final Map<String, String> headers;
-
-  OmniAPI({
-    this.headers = const {'Content-Type': 'application/json'},
-  });
-
-  Uri get voiceCloneEndpoint => Uri.parse('$baseUrl/upload-wav/');
-}
+import 'dart:convert';
 
 Future<(Uint8List, http.Response)> postVoiceClone({
   required OmniAPI endpoint,
@@ -102,5 +69,36 @@ Future<(Uint8List, http.Response)> postVoiceClone({
     rethrow;
   } catch (e) {
     throw APIError.unknown();
+  }
+}
+
+Future<SignupResponse> signup({
+  required SignupRequest request,
+  Duration timeout = const Duration(seconds: 10),
+}) async {
+  try {
+    final Uri signupEndpoint = OmniAPI().signupEndpoint;
+    final response = await http
+        .post(
+          signupEndpoint,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode(request.toJson()),
+        )
+        .timeout(timeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return SignupResponse.fromJson(jsonDecode(response.body));
+    } else {
+      final errorBody = jsonDecode(response.body);
+      throw APIError(
+          errorBody['detail'] ?? 'Signup failed', response.statusCode);
+    }
+  } on TimeoutException {
+    throw APIError('Request timed out after ${timeout.inSeconds} seconds');
+  } catch (e) {
+    if (e is APIError) rethrow;
+    throw APIError(e.toString());
   }
 }

@@ -1,3 +1,4 @@
+import 'package:audio_recorder/models/language_model.dart';
 import 'package:flutter/material.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -18,6 +19,10 @@ class _LoginScreenState extends State<LoginScreen> {
       TextEditingController();
   final TextEditingController _signupConfirmPasswordController =
       TextEditingController();
+  final TextEditingController _signupUsernameController =
+      TextEditingController();
+  String _selectedLanguage =
+      Languages.languages.values.first.code; // Default language
 
   bool _showLoginForm = false;
   bool _showSignupForm = false;
@@ -30,6 +35,7 @@ class _LoginScreenState extends State<LoginScreen> {
     _signupEmailController.dispose();
     _signupPasswordController.dispose();
     _signupConfirmPasswordController.dispose();
+    _signupUsernameController.dispose();
     super.dispose();
   }
 
@@ -208,47 +214,17 @@ class _LoginScreenState extends State<LoginScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
       child: Column(
         children: [
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[200],
-              borderRadius: BorderRadius.circular(12.0),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8.0),
-              child: TextField(
-                controller: _loginEmailController,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  labelStyle: TextStyle(fontSize: 16),
-                  hintText: 'Enter your email address',
-                  hintStyle: TextStyle(fontSize: 14),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(horizontal: 16.0),
-                ),
-              ),
-            ),
+          CustomTextField(
+            controller: _loginEmailController,
+            labelText: 'Email',
+            hintText: 'Enter your email address',
           ),
           const SizedBox(height: 10),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[200],
-              borderRadius: BorderRadius.circular(12.0),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8.0),
-              child: TextField(
-                controller: _loginPasswordController,
-                decoration: const InputDecoration(
-                  labelText: 'Password',
-                  labelStyle: TextStyle(fontSize: 16),
-                  hintText: 'Enter your password',
-                  hintStyle: TextStyle(fontSize: 14),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(horizontal: 16.0),
-                ),
-                obscureText: true,
-              ),
-            ),
+          CustomTextField(
+            controller: _loginPasswordController,
+            labelText: 'Password',
+            hintText: 'Enter your password',
+            obscureText: true,
           ),
           const SizedBox(height: 20),
         ],
@@ -281,90 +257,110 @@ class _LoginScreenState extends State<LoginScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
       child: Column(
         children: [
+          CustomTextField(
+            controller: _signupNameController,
+            labelText: 'Name',
+            hintText: 'Enter your full name',
+          ),
+          const SizedBox(height: 10),
+          CustomTextField(
+            controller: _signupUsernameController,
+            labelText: 'Username',
+            hintText: 'Enter your username',
+          ),
+          const SizedBox(height: 10),
           Container(
             decoration: BoxDecoration(
-              color: Colors.grey[200],
+              color: Colors.white.withAlpha(500),
               borderRadius: BorderRadius.circular(12.0),
             ),
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8.0),
-              child: TextField(
-                controller: _signupNameController,
-                decoration: const InputDecoration(
-                  labelText: 'Name',
-                  labelStyle: TextStyle(fontSize: 16),
-                  hintText: 'Enter your full name',
-                  hintStyle: TextStyle(fontSize: 14),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: DropdownButtonFormField<String>(
+                value: _selectedLanguage,
+                dropdownColor: Colors.grey[200],
+                style: const TextStyle(color: Colors.black),
+                decoration: InputDecoration(
+                  labelText: 'Preferred Language',
+                  labelStyle: TextStyle(
+                    fontSize: 16,
+                    color: Colors.black.withAlpha(204),
+                  ),
                   border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(horizontal: 16.0),
+                ),
+                items: Languages.languages.values.map((LanguageModel language) {
+                  return DropdownMenuItem<String>(
+                    value: language.code,
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 24,
+                          height: 24,
+                          margin: const EdgeInsets.only(right: 8),
+                          decoration: BoxDecoration(
+                            gradient: language.flagOrientation ==
+                                    FlagOrientation.circle
+                                ? RadialGradient(
+                                    colors: language.colors,
+                                    center: Alignment.center,
+                                    radius: 0.8,
+                                  )
+                                : LinearGradient(
+                                    colors: language.colors,
+                                    begin: language.flagOrientation ==
+                                            FlagOrientation.horizontal
+                                        ? Alignment.centerLeft
+                                        : Alignment.topCenter,
+                                    end: language.flagOrientation ==
+                                            FlagOrientation.horizontal
+                                        ? Alignment.centerRight
+                                        : Alignment.bottomCenter,
+                                  ),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        Text(
+                          language.name,
+                          style: const TextStyle(color: Colors.black),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+                onChanged: (String? newValue) {
+                  if (newValue != null) {
+                    setState(() {
+                      _selectedLanguage = newValue;
+                    });
+                  }
+                },
+                icon: Icon(
+                  Icons.arrow_drop_down,
+                  color: Colors.black.withAlpha(204),
                 ),
               ),
             ),
           ),
           const SizedBox(height: 10),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[200],
-              borderRadius: BorderRadius.circular(12.0),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8.0),
-              child: TextField(
-                controller: _signupEmailController,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  labelStyle: TextStyle(fontSize: 16),
-                  hintText: 'Enter your email address',
-                  hintStyle: TextStyle(fontSize: 14),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(horizontal: 16.0),
-                ),
-              ),
-            ),
+          CustomTextField(
+            controller: _signupEmailController,
+            labelText: 'Email',
+            hintText: 'Enter your email address',
           ),
           const SizedBox(height: 10),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[200],
-              borderRadius: BorderRadius.circular(12.0),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8.0),
-              child: TextField(
-                controller: _signupPasswordController,
-                decoration: const InputDecoration(
-                  labelText: 'Password',
-                  labelStyle: TextStyle(fontSize: 16),
-                  hintText: 'Enter your password',
-                  hintStyle: TextStyle(fontSize: 14),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(horizontal: 16.0),
-                ),
-                obscureText: true,
-              ),
-            ),
+          CustomTextField(
+            controller: _signupPasswordController,
+            labelText: 'Password',
+            hintText: 'Enter your password',
+            obscureText: true,
           ),
           const SizedBox(height: 10),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[200],
-              borderRadius: BorderRadius.circular(12.0),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8.0),
-              child: TextField(
-                controller: _signupConfirmPasswordController,
-                decoration: const InputDecoration(
-                  labelText: 'Confirm Password',
-                  labelStyle: TextStyle(fontSize: 16),
-                  hintText: 'Re-enter your password',
-                  hintStyle: TextStyle(fontSize: 14),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(horizontal: 16.0),
-                ),
-                obscureText: true,
-              ),
-            ),
+          CustomTextField(
+            controller: _signupConfirmPasswordController,
+            labelText: 'Confirm Password',
+            hintText: 'Re-enter your password',
+            obscureText: true,
           ),
           const SizedBox(height: 20),
         ],
@@ -410,6 +406,53 @@ class _PulsingLogoState extends State<PulsingLogo>
     return ScaleTransition(
       scale: _animation,
       child: widget.child,
+    );
+  }
+}
+
+class CustomTextField extends StatelessWidget {
+  final TextEditingController controller;
+  final String labelText;
+  final String hintText;
+  final bool obscureText;
+
+  const CustomTextField({
+    super.key,
+    required this.controller,
+    required this.labelText,
+    required this.hintText,
+    this.obscureText = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withAlpha(500),
+        borderRadius: BorderRadius.circular(12.0),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8.0),
+        child: TextField(
+          controller: controller,
+          style: const TextStyle(color: Colors.black),
+          decoration: InputDecoration(
+            labelText: labelText,
+            labelStyle: TextStyle(
+              fontSize: 16,
+              color: Colors.black.withAlpha(204),
+            ),
+            hintText: hintText,
+            hintStyle: TextStyle(
+              fontSize: 14,
+              color: Colors.black.withAlpha(128),
+            ),
+            border: InputBorder.none,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
+          ),
+          obscureText: obscureText,
+        ),
+      ),
     );
   }
 }

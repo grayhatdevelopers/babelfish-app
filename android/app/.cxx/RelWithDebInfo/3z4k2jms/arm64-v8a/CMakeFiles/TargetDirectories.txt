@@ -1,0 +1,2 @@
+/Users/aarijimam/Work/Grayhat/Babelfish-project/FlutterApp/omni/android/app/.cxx/RelWithDebInfo/3z4k2jms/arm64-v8a/CMakeFiles/edit_cache.dir
+/Users/aarijimam/Work/Grayhat/Babelfish-project/FlutterApp/omni/android/app/.cxx/RelWithDebInfo/3z4k2jms/arm64-v8a/CMakeFiles/rebuild_cache.dir
