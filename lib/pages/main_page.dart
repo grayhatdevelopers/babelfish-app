@@ -1,4 +1,5 @@
 import 'package:audio_recorder/models/language_model.dart';
+import 'package:audio_recorder/services/storage_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_sfsymbols/flutter_sfsymbols.dart';
@@ -28,7 +29,8 @@ class TranslationAppState extends State<TranslationApp> {
 
   String serverUrl =
       'ws://ec2-13-50-56-128.eu-north-1.compute.amazonaws.com:8001/ws/client';
-  String userID = 'ronaldo';
+  String? userID = 'ronaldo'; // Changed to nullable
+  String? tokenJWT = ''; // Changed to nullable
 
   bool isRecording = false;
 
@@ -63,6 +65,7 @@ class TranslationAppState extends State<TranslationApp> {
   @override
   void initState() {
     super.initState();
+    _initializeUser();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         final screenHeight = MediaQuery.of(context).size.height;
@@ -72,14 +75,24 @@ class TranslationAppState extends State<TranslationApp> {
             heightBottom = screenHeight * 0.5;
           });
         } else {
-          // Fallback to a default height if MediaQuery returns 0
           setState(() {
-            heightTop = 300; // You can adjust this default value
+            heightTop = 300;
             heightBottom = 300;
           });
         }
       }
     });
+  }
+
+  Future<void> _initializeUser() async {
+    final (token, _, username, language) = await StorageService.getStoredData();
+    if (username != null && mounted) {
+      setState(() {
+        userID = username;
+        tokenJWT = token;
+        bottomLanguage = language ?? 'it';
+      });
+    }
   }
 
   @override
@@ -658,7 +671,7 @@ class TranslationAppState extends State<TranslationApp> {
       if (kDebugMode) {
         print("WebSocket connected debug message");
       }
-      _websocketService?.sendMessage(userID);
+      _websocketService?.sendMessage(userID ?? 'ronaldo');
 
       _websocketService?.startListening((message) {
         ResponseHandler.handleReponse(message, (message) {

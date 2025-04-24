@@ -1,20 +1,23 @@
 import 'package:audio_recorder/models/api_response.dart';
-import 'package:uuid/uuid.dart';
+import 'package:audio_recorder/services/storage_service.dart';
 import '../services/api_service.dart';
 
 class VoiceCloningService {
   final OmniAPI _api;
-  final _uuid = const Uuid();
 
   VoiceCloningService() : _api = OmniAPI();
 
   Future<bool> submitVoiceCloning(String audioFilePath) async {
     try {
-      final userUuid = _uuid.v4();
+      final username = await StorageService.getUsername();
+      if (username == null) {
+        throw APIError('User not authenticated');
+      }
+
       final (audioData, response) = await postVoiceClone(
         endpoint: _api,
         filePath: audioFilePath,
-        uuid: userUuid,
+        uuid: username, // Using username instead of UUID
       );
 
       if (response.statusCode >= 200 && response.statusCode < 300) {

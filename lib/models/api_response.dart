@@ -1,10 +1,39 @@
-class SignupResponse {
+class OmniAPI {
+  String baseUrl = 'http://localhost:8081';
+  final Map<String, String> headers;
+
+  OmniAPI({
+    this.headers = const {'Content-Type': 'application/json'},
+  });
+
+  Uri get voiceCloneEndpoint => Uri.parse('$baseUrl/upload-wav/');
+  Uri get signupEndpoint => Uri.parse('$baseUrl/auth/signup');
+  Uri get loginEndpoint => Uri.parse('$baseUrl/auth/login');
+}
+
+class AuthResponse {
   final String message;
+  final String username;
+  final String language;
+  final String accessToken;
+  final bool embeddingsExist;
 
-  SignupResponse({required this.message});
+  AuthResponse({
+    required this.message,
+    required this.username,
+    required this.language,
+    required this.accessToken,
+    required this.embeddingsExist,
+  });
 
-  factory SignupResponse.fromJson(Map<String, dynamic> json) {
-    return SignupResponse(message: json['message']);
+  factory AuthResponse.fromJson(Map<String, dynamic> json) {
+    return AuthResponse(
+      message: json['message'] ?? '',
+      username: json['username'],
+      language: json['language'],
+      accessToken: json['access_token'],
+      embeddingsExist: json['embeddings_exist'] ?? false,
+    );
   }
 }
 
@@ -12,6 +41,7 @@ class SignupRequest {
   final String username;
   final String password;
   final String email;
+  final String name;
   final String language;
 
   SignupRequest({
@@ -19,6 +49,7 @@ class SignupRequest {
     required this.password,
     required this.email,
     required this.language,
+    required this.name,
   });
 
   Map<String, dynamic> toJson() {
@@ -26,6 +57,7 @@ class SignupRequest {
       'username': username,
       'password': password,
       'email': email,
+      'name': name,
       'language': language,
     };
   }
@@ -48,13 +80,43 @@ class LoginRequest {
   }
 }
 
-class LoginResponse {
-  final String accessToken;
+class SignupResponse extends AuthResponse {
+  SignupResponse({
+    required super.message,
+    required super.username,
+    required super.language,
+    required super.accessToken,
+    required super.embeddingsExist,
+  });
 
-  LoginResponse({required this.accessToken});
+  factory SignupResponse.fromJson(Map<String, dynamic> json) {
+    return SignupResponse(
+      message: json['message'] ?? '',
+      username: json['username'],
+      language: json['language'],
+      accessToken: json['access_token'],
+      embeddingsExist: json['embeddings_exist'] ?? false,
+    );
+  }
+}
+
+class LoginResponse extends AuthResponse {
+  LoginResponse({
+    required super.message,
+    required super.username,
+    required super.language,
+    required super.accessToken,
+    required super.embeddingsExist,
+  });
 
   factory LoginResponse.fromJson(Map<String, dynamic> json) {
-    return LoginResponse(accessToken: json['access_token']);
+    return LoginResponse(
+      message: json['message'] ?? '',
+      username: json['username'],
+      language: json['language'],
+      accessToken: json['access_token'],
+      embeddingsExist: json['embeddings_exist'] ?? false,
+    );
   }
 }
 
@@ -80,18 +142,4 @@ class FileError implements Exception {
 
   @override
   String toString() => 'FileError: $message';
-}
-
-class OmniAPI {
-  String baseUrl =
-      'http://ec2-13-50-56-128.eu-north-1.compute.amazonaws.com:8000';
-  final Map<String, String> headers;
-
-  OmniAPI({
-    this.headers = const {'Content-Type': 'application/json'},
-  });
-
-  Uri get voiceCloneEndpoint => Uri.parse('$baseUrl/upload-wav/');
-  Uri get signupEndpoint => Uri.parse('$baseUrl/auth/signup');
-  Uri get loginEndpoint => Uri.parse('$baseUrl/auth/login');
 }

@@ -1,4 +1,9 @@
+import 'package:audio_recorder/models/api_response.dart';
 import 'package:audio_recorder/models/language_model.dart';
+import 'package:audio_recorder/pages/main_page.dart';
+import 'package:audio_recorder/pages/voice_cloning.dart';
+import 'package:audio_recorder/services/api_service.dart';
+import 'package:audio_recorder/services/storage_service.dart';
 import 'package:flutter/material.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -141,29 +146,12 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _executeOption(bool isLogin) async {
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    setState(() {
+      _isLoading = true;
+    });
 
-    bool isValidEmail(String email) {
-      final emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+');
-      return emailRegex.hasMatch(email);
-    }
-
-    if (isLogin) {
-      if (_loginEmailController.text.isEmpty ||
-          _loginPasswordController.text.isEmpty) {
-        scaffoldMessenger.showSnackBar(
-          const SnackBar(content: Text('Please fill in all login fields')),
-        );
-        return;
-      }
-      if (!isValidEmail(_loginEmailController.text)) {
-        scaffoldMessenger.showSnackBar(
-          const SnackBar(content: Text('Please enter a valid email address')),
-        );
-        return;
-      }
-
-      try {
+    try {
+      if (isLogin) {
         final loginRequest = LoginRequest(
           username: _loginEmailController.text,
           password: _loginPasswordController.text,
@@ -171,58 +159,34 @@ class _LoginScreenState extends State<LoginScreen> {
 
         final response = await login(request: loginRequest);
 
-        // Store the token securely (you might want to use flutter_secure_storage)
-        // await storage.write(key: 'auth_token', value: response.accessToken);
+        // Store the token and other data securely
+        await StorageService.saveToken(
+          response.username,
+          response.accessToken,
+          response.embeddingsExist,
+          response.language,
+        );
 
-        // Navigate to main app screen
         if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const HomeScreen()),
+          // Show success message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(response.message)),
           );
+
+          if (response.embeddingsExist) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const TranslationApp()),
+            );
+          } else {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                  builder: (context) => const VoiceCloningScreen()),
+            );
+          }
         }
-      } on APIError catch (e) {
-        scaffoldMessenger.showSnackBar(
-          SnackBar(content: Text(e.message)),
-        );
-      }
-    } else {
-      if (_signupNameController.text.isEmpty ||
-          _signupEmailController.text.isEmpty ||
-          _signupPasswordController.text.isEmpty ||
-          _signupConfirmPasswordController.text.isEmpty ||
-          _signupUsernameController.text.isEmpty) {
-        scaffoldMessenger.showSnackBar(
-          const SnackBar(content: Text('Please fill in all signup fields')),
-        );
-        return;
-      }
-
-      if (!isValidEmail(_signupEmailController.text)) {
-        scaffoldMessenger.showSnackBar(
-          const SnackBar(content: Text('Please enter a valid email address')),
-        );
-        return;
-      }
-
-      if (_signupPasswordController.text !=
-          _signupConfirmPasswordController.text) {
-        scaffoldMessenger.showSnackBar(
-          const SnackBar(content: Text('Passwords do not match')),
-        );
-        return;
-      }
-
-      // Add password strength validation
-      if (_signupPasswordController.text.length < 8) {
-        scaffoldMessenger.showSnackBar(
-          const SnackBar(
-              content: Text('Password must be at least 8 characters long')),
-        );
-        return;
-      }
-
-      try {
+      } else {
         final signupRequest = SignupRequest(
           username: _signupUsernameController.text,
           password: _signupPasswordController.text,
@@ -233,25 +197,41 @@ class _LoginScreenState extends State<LoginScreen> {
 
         final response = await signup(request: signupRequest);
 
-        // Store the token securely
-        // await storage.write(key: 'auth_token', value: response.accessToken);
-
-        // Show success message
-        scaffoldMessenger.showSnackBar(
-          const SnackBar(content: Text('Signup successful! Welcome!')),
+        // Store the token and other data securely
+        await StorageService.saveToken(
+          response.username,
+          response.accessToken,
+          response.embeddingsExist,
+          response.language,
         );
 
-        // Navigate to main app screen
         if (mounted) {
+          // Show success message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(response.message)),
+          );
+
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => const HomeScreen()),
+            MaterialPageRoute(
+              builder: (context) => response.embeddingsExist
+                  ? const TranslationApp()
+                  : const VoiceCloningScreen(),
+            ),
           );
         }
-      } on APIError catch (e) {
-        scaffoldMessenger.showSnackBar(
+      }
+    } on APIError catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(e.message)),
         );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
       }
     }
   }
