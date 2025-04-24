@@ -1,3 +1,4 @@
+import 'package:audio_recorder/pages/login_page.dart';
 import 'package:audio_recorder/pages/voice_cloning.dart';
 import 'package:flutter/material.dart';
 
@@ -12,12 +13,16 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Babelfish',
+      themeMode: ThemeMode.dark, // Set default theme mode to dark
       darkTheme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.dark,
+        scaffoldBackgroundColor: Colors.black,
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.deepPurple,
           brightness: Brightness.dark,
+          background: Colors.black,
+          surface: Colors.black,
           dynamicSchemeVariant: DynamicSchemeVariant.monochrome,
         ),
       ),
@@ -30,7 +35,7 @@ class MyApp extends StatelessWidget {
           dynamicSchemeVariant: DynamicSchemeVariant.monochrome,
         ),
       ),
-      home: VoiceCloningScreen(),
+      home: LoginScreen(),
     );
   }
 }
