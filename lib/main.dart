@@ -1,6 +1,3 @@
-import 'dart:ui';
-
-import 'package:audio_recorder/pages/main_page.dart';
 import 'package:audio_recorder/pages/voice_cloning.dart';
 import 'package:flutter/material.dart';
 

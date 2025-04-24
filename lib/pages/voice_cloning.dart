@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:audio_recorder/pages/main_page.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
