@@ -26,6 +26,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _showLoginForm = false;
   bool _showSignupForm = false;
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -139,7 +140,7 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
-  void _executeOption(bool isLogin) {
+  void _executeOption(bool isLogin) async {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
 
     bool isValidEmail(String email) {
@@ -161,23 +162,49 @@ class _LoginScreenState extends State<LoginScreen> {
         );
         return;
       }
-      print('Login');
+
+      try {
+        final loginRequest = LoginRequest(
+          username: _loginEmailController.text,
+          password: _loginPasswordController.text,
+        );
+
+        final response = await login(request: loginRequest);
+
+        // Store the token securely (you might want to use flutter_secure_storage)
+        // await storage.write(key: 'auth_token', value: response.accessToken);
+
+        // Navigate to main app screen
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const HomeScreen()),
+          );
+        }
+      } on APIError catch (e) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(content: Text(e.message)),
+        );
+      }
     } else {
       if (_signupNameController.text.isEmpty ||
           _signupEmailController.text.isEmpty ||
           _signupPasswordController.text.isEmpty ||
-          _signupConfirmPasswordController.text.isEmpty) {
+          _signupConfirmPasswordController.text.isEmpty ||
+          _signupUsernameController.text.isEmpty) {
         scaffoldMessenger.showSnackBar(
           const SnackBar(content: Text('Please fill in all signup fields')),
         );
         return;
       }
+
       if (!isValidEmail(_signupEmailController.text)) {
         scaffoldMessenger.showSnackBar(
           const SnackBar(content: Text('Please enter a valid email address')),
         );
         return;
       }
+
       if (_signupPasswordController.text !=
           _signupConfirmPasswordController.text) {
         scaffoldMessenger.showSnackBar(
@@ -185,7 +212,47 @@ class _LoginScreenState extends State<LoginScreen> {
         );
         return;
       }
-      print('Register');
+
+      // Add password strength validation
+      if (_signupPasswordController.text.length < 8) {
+        scaffoldMessenger.showSnackBar(
+          const SnackBar(
+              content: Text('Password must be at least 8 characters long')),
+        );
+        return;
+      }
+
+      try {
+        final signupRequest = SignupRequest(
+          username: _signupUsernameController.text,
+          password: _signupPasswordController.text,
+          email: _signupEmailController.text,
+          name: _signupNameController.text,
+          language: _selectedLanguage,
+        );
+
+        final response = await signup(request: signupRequest);
+
+        // Store the token securely
+        // await storage.write(key: 'auth_token', value: response.accessToken);
+
+        // Show success message
+        scaffoldMessenger.showSnackBar(
+          const SnackBar(content: Text('Signup successful! Welcome!')),
+        );
+
+        // Navigate to main app screen
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const HomeScreen()),
+          );
+        }
+      } on APIError catch (e) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(content: Text(e.message)),
+        );
+      }
     }
   }
 
@@ -197,15 +264,16 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         minimumSize: const Size(400, 70),
       ),
-      onPressed: () {
-        _toggleForm(true);
-      },
-      child: Text('Login',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Theme.of(context).colorScheme.primary,
-          )),
+      onPressed: _isLoading ? null : () => _toggleForm(true),
+      child: _isLoading
+          ? CircularProgressIndicator(
+              color: Theme.of(context).colorScheme.primary)
+          : Text('Login',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.primary,
+              )),
     );
   }
 
@@ -240,15 +308,15 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
           backgroundColor: Theme.of(context).colorScheme.secondary,
           minimumSize: const Size(400, 70)),
-      onPressed: () {
-        _toggleForm(false);
-      },
-      child: const Text('Register',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          )),
+      onPressed: _isLoading ? null : () => _toggleForm(false),
+      child: _isLoading
+          ? const CircularProgressIndicator(color: Colors.white)
+          : const Text('Register',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              )),
     );
   }
 

@@ -102,3 +102,34 @@ Future<SignupResponse> signup({
     throw APIError(e.toString());
   }
 }
+
+Future<LoginResponse> login({
+  required LoginRequest request,
+  Duration timeout = const Duration(seconds: 10),
+}) async {
+  try {
+    final Uri loginEndpoint = OmniAPI().loginEndpoint;
+    final response = await http
+        .post(
+          loginEndpoint,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode(request.toJson()),
+        )
+        .timeout(timeout);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return LoginResponse.fromJson(jsonDecode(response.body));
+    } else {
+      final errorBody = jsonDecode(response.body);
+      throw APIError(
+          errorBody['detail'] ?? 'Login failed', response.statusCode);
+    }
+  } on TimeoutException {
+    throw APIError('Request timed out after ${timeout.inSeconds} seconds');
+  } catch (e) {
+    if (e is APIError) rethrow;
+    throw APIError(e.toString());
+  }
+}
