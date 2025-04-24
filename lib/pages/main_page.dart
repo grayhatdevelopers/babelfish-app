@@ -27,7 +27,7 @@ class TranslationAppState extends State<TranslationApp> {
   double heightBottom = 100;
 
   String serverUrl =
-      'ws://ec2-51-21-88-102.eu-north-1.compute.amazonaws.com:8001';
+      'ws://ec2-13-50-56-128.eu-north-1.compute.amazonaws.com:8001/ws/client';
   String userID = 'ronaldo';
 
   bool isRecording = false;
@@ -658,7 +658,6 @@ class TranslationAppState extends State<TranslationApp> {
       if (kDebugMode) {
         print("WebSocket connected debug message");
       }
-      _websocketService?.sendMessage('client');
       _websocketService?.sendMessage(userID);
 
       _websocketService?.startListening((message) {

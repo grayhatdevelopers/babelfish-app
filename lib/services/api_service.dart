@@ -29,14 +29,15 @@ class FileError implements Exception {
 }
 
 class OmniAPI {
-  String baseUrl = 'http://34.31.82.234:8800';
+  String baseUrl =
+      'http://ec2-13-50-56-128.eu-north-1.compute.amazonaws.com:8000';
   final Map<String, String> headers;
 
   OmniAPI({
     this.headers = const {'Content-Type': 'application/json'},
   });
 
-  Uri get voiceCloneEndpoint => Uri.parse('$baseUrl/voice-clone');
+  Uri get voiceCloneEndpoint => Uri.parse('$baseUrl/upload-wav/');
 }
 
 Future<(Uint8List, http.Response)> postVoiceClone({

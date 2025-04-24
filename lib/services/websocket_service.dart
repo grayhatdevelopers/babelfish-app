@@ -29,7 +29,8 @@ class WebsocketService {
             print("Failed to establish WebSocket connection: $e");
           }
           // Clean up the channel on failure
-          _channel?.sink.close();
+          _channel?.sink
+              .close(WebSocketStatus.normalClosure, 'Connection failed');
           _channel = null;
           isWebSocketConnected = false;
           return false;

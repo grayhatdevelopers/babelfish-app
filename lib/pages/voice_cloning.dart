@@ -50,7 +50,7 @@ class VoiceCloningScreenState extends State<VoiceCloningScreen> {
 
   Future<void> _initAudioFile() async {
     final tempDir = await getTemporaryDirectory();
-    _audioFile = '${tempDir.path}/voice_cloning.aac';
+    _audioFile = '${tempDir.path}/voice_cloning.wav';
   }
 
   Future<void> _checkAndRequestPermissions() async {
@@ -115,7 +115,7 @@ class VoiceCloningScreenState extends State<VoiceCloningScreen> {
       if (_currentSentenceIndex == 0) {
         await _audioRecorder!.startRecorder(
           toFile: _audioFile,
-          codec: Codec.aacADTS,
+          codec: Codec.pcm16WAV,
           audioSource: AudioSource.microphone,
           sampleRate: _sampleRate,
         );
