@@ -581,7 +581,22 @@ class TranslationAppState extends State<TranslationApp> {
       }
       return;
     }
-    if (await _connectWebSocket()) {
+    if (recorderEnabled) {
+      final connected = _connectWebSocket();
+    } else {
+      isInitialized = false;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'Failed to connect to the server. Please check your connection and try again.'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      _stopRecording();
+    }
+    if (true) {
       if (kDebugMode) {
         print('Creating audio engine');
       }
@@ -619,18 +634,6 @@ class TranslationAppState extends State<TranslationApp> {
           );
         }
       }
-    } else {
-      isInitialized = false;
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                'Failed to connect to the server. Please check your connection and try again.'),
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-      _stopRecording();
     }
   }
 
@@ -648,12 +651,19 @@ class TranslationAppState extends State<TranslationApp> {
     await audioEngine?.dispose();
     audioEngine = null;
 
-    // Close WebSocket connection
+    // // Close WebSocket connection
+    // if (_websocketService != null) {
+    //   await _websocketService!.close();
+    //   _websocketService = null;
+    // }
+    isInitialized = false;
+  }
+
+  Future<void> _disconnectWebSocket() async {
     if (_websocketService != null) {
       await _websocketService!.close();
       _websocketService = null;
     }
-    isInitialized = false;
   }
 
   Future<void> clearQueue() async {
@@ -683,12 +693,8 @@ class TranslationAppState extends State<TranslationApp> {
           }
           _processText(message);
         }, (audioData) {
-          if (isPlaying) {
-            _previewData?.add(audioData);
-            audioEngine?.queueChunk(audioData);
-          } else {
-            _recordedData?.add(audioData);
-          }
+          _previewData?.add(audioData);
+          audioEngine?.queueChunk(audioData);
         });
       });
       return true;
@@ -696,12 +702,20 @@ class TranslationAppState extends State<TranslationApp> {
     return false;
   }
 
+  void _stopRecordingwithPlayback() {
+    setState(() {
+      destroyAudioEngine();
+    });
+  }
+
   void _toggleRecordingandPlayback() {
     setState(() {
-      _toggleRecording();
+      _stopRecordingwithPlayback();
       if (!isPlaying) {
         setState(() {
           isPlaying = true;
+          createAudioEngine(recorderEnabled: false);
+          startPlayer();
           _recordedData?.forEach((data) => _previewData?.add(data));
           _recordedData?.forEach((data) => audioEngine?.queueChunk(data));
         });
