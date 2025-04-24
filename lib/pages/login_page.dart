@@ -352,7 +352,7 @@ class _LoginScreenState extends State<LoginScreen> {
           const SizedBox(height: 10),
           Container(
             decoration: BoxDecoration(
-              color: Colors.white.withAlpha(500),
+              color: Colors.grey.shade400,
               borderRadius: BorderRadius.circular(12.0),
             ),
             child: Padding(
@@ -509,7 +509,7 @@ class CustomTextField extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withAlpha(500),
+        color: Colors.grey.shade400,
         borderRadius: BorderRadius.circular(12.0),
       ),
       child: Padding(

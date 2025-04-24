@@ -282,7 +282,7 @@ class VoiceCloningScreenState extends State<VoiceCloningScreen> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
+                  color: Colors.grey.shade400,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
                     color: _isRecording ? Colors.blue : Colors.grey.shade300,
@@ -325,7 +325,7 @@ class VoiceCloningScreenState extends State<VoiceCloningScreen> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(10),
                     child: Container(
-                      color: Colors.grey.shade200,
+                      color: Colors.grey.shade400,
                       child: AudioWaveforms(
                         size:
                             Size(MediaQuery.of(context).size.width * 0.8, 100),
