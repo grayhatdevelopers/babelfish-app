@@ -199,6 +199,7 @@ class TranslationAppState extends State<TranslationApp> {
       _previewData = [];
     } else {
       _previewData = null;
+      _recordedData = [];
     }
 
     setState(() {});
@@ -725,19 +726,12 @@ class TranslationAppState extends State<TranslationApp> {
       setState(() {
         isPlaying = true;
       });
-      print('Staring to play');
-      await _toggleRecording();
-      await createAudioEngine(recorderEnabled: false);
-      await startPlayer();
       if (_previewData == null || _previewData!.isEmpty) {
         _previewData = [];
       }
       _recordedData?.forEach((data) => _previewData?.add(data));
       _recordedData?.forEach((data) => audioEngine?.queueChunk(data));
     } else {
-      print('Staring recording again');
-      await destroyAudioEngine();
-      await _toggleRecording();
       setState(() {
         isPlaying = false;
       });

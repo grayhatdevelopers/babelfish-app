@@ -6,7 +6,7 @@ class OmniAPI {
     this.headers = const {'Content-Type': 'application/json'},
   });
 
-  static Uri get voiceCloneEndpoint => Uri.parse('$baseUrl/upload-wav/');
+  static Uri get voiceCloneEndpoint => Uri.parse('$baseUrl/voice-clone/');
   static Uri get signupEndpoint => Uri.parse('$baseUrl/auth/signup');
   static get loginEndpoint => Uri.parse('$baseUrl/auth/login');
 }
