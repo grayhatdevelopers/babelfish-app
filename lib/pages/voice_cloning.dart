@@ -104,8 +104,12 @@ class VoiceCloningScreenState extends State<VoiceCloningScreen> {
 
   void _startRecording() async {
     if (_audioRecorder == null) {
-      _showErrorDialog('Recorder is not initialized.');
-      return;
+      _initializeRecorder();
+      if (_audioRecorder == null) {
+        _showErrorDialog('Recorder is not initialized.');
+
+        return;
+      }
     }
 
     try {

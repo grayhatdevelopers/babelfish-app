@@ -10,7 +10,7 @@ import 'dart:convert';
 Future<(Uint8List, http.Response)> postVoiceClone({
   required String filePath,
   required String uuid,
-  Duration timeout = const Duration(seconds: 10),
+  Duration timeout = const Duration(seconds: 60),
 }) async {
   try {
     final file = File(filePath);
