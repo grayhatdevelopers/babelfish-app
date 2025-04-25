@@ -28,8 +28,7 @@ class TranslationAppState extends State<TranslationApp> {
   double heightTop = 100;
   double heightBottom = 100;
 
-  String serverUrl =
-      'ws://ec2-13-50-56-128.eu-north-1.compute.amazonaws.com:8001/ws/client';
+  String serverUrl = 'ws://5117-119-156-232-132.ngrok-free.app/ws/client';
   String? userID = 'ronaldo'; // Changed to nullable
   String? tokenJWT = ''; // Changed to nullable
 
@@ -239,7 +238,9 @@ class TranslationAppState extends State<TranslationApp> {
   Widget _topSection() {
     return GestureDetector(
       onLongPress: () => _showLanguageSelector(true),
-      onTap: _toggleRecordingandPlayback,
+      onTap: () {
+        isExpandedTop ? _toggleRecordingandPlayback() : () {};
+      },
       child: AnimatedContainer(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -265,7 +266,9 @@ class TranslationAppState extends State<TranslationApp> {
   Widget _bottomSection() {
     return GestureDetector(
       onLongPress: () => _showLanguageSelector(false),
-      onTap: _toggleRecordingandPlayback,
+      onTap: () {
+        isExpandedBottom ? _toggleRecordingandPlayback() : () {};
+      },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         decoration: BoxDecoration(
@@ -517,9 +520,14 @@ class TranslationAppState extends State<TranslationApp> {
       print('Sending chunk to server');
     }
     if (_websocketService != null &&
-        (_websocketService?.isWebSocketConnected ?? false)) {
+        (_websocketService?.isWebSocketConnected ?? false) &&
+        !isPlaying) {
       _websocketService?.sendData(_sampleRate, 'ronaldo',
           isExpandedTop ? topLanguage : bottomLanguage, chunk);
+    } else {
+      if (kDebugMode) {
+        print('WebSocket is not connected');
+      }
     }
   }
 
@@ -584,7 +592,7 @@ class TranslationAppState extends State<TranslationApp> {
       }
       return;
     }
-    if (recorderEnabled) {
+    if (recorderEnabled && !isWebSocketConnected) {
       final connected = await _connectWebSocket();
       if (connected) {
       } else {
@@ -609,6 +617,7 @@ class TranslationAppState extends State<TranslationApp> {
         final audioEngineNew = RealtimeAudio(recorderEnabled: recorderEnabled);
         await audioEngineNew.isInitialized;
 
+        print('Audio engine created');
         setState(() {
           audioEngine = audioEngineNew;
           _state = audioEngine!.state;
@@ -711,30 +720,31 @@ class TranslationAppState extends State<TranslationApp> {
     return false;
   }
 
-  Future<void> _stopRecordingwithPlayback() async {
-    await destroyAudioEngine();
-  }
-
   void _toggleRecordingandPlayback() async {
     if (!isPlaying) {
       setState(() {
         isPlaying = true;
       });
-      await _stopRecordingwithPlayback();
+      print('Staring to play');
+      await _toggleRecording();
       await createAudioEngine(recorderEnabled: false);
       await startPlayer();
+      if (_previewData == null || _previewData!.isEmpty) {
+        _previewData = [];
+      }
       _recordedData?.forEach((data) => _previewData?.add(data));
       _recordedData?.forEach((data) => audioEngine?.queueChunk(data));
     } else {
+      print('Staring recording again');
+      await destroyAudioEngine();
+      await _toggleRecording();
       setState(() {
         isPlaying = false;
-        _previewData?.clear();
       });
-      await startRecording();
     }
   }
 
-  void _toggleRecording() async {
+  Future<void> _toggleRecording() async {
     if (isRecording) {
       setState(() {
         isRecording = false;
@@ -758,6 +768,7 @@ class TranslationAppState extends State<TranslationApp> {
   }
 
   Future<void> startRecording() async {
+    print('Is Initialized: $isInitialized');
     if (!isInitialized) {
       await createAudioEngine(recorderEnabled: true);
     }

@@ -1,5 +1,5 @@
 class OmniAPI {
-  static String baseUrl = 'https://2c6f-203-82-54-66.ngrok-free.app';
+  static String baseUrl = 'https://909a-203-82-54-66.ngrok-free.app';
   final Map<String, String> headers;
 
   OmniAPI({
