@@ -28,7 +28,8 @@ class TranslationAppState extends State<TranslationApp> {
   double heightTop = 100;
   double heightBottom = 100;
 
-  String serverUrl = 'ws://5117-119-156-232-132.ngrok-free.app/ws/client';
+  String serverUrl =
+      'ws://ec2-13-50-56-128.eu-north-1.compute.amazonaws.com:8000/ws/client';
   String? userID = 'ronaldo'; // Changed to nullable
   String? tokenJWT = ''; // Changed to nullable
 

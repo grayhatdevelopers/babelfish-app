@@ -215,7 +215,7 @@ class VoiceCloningScreenState extends State<VoiceCloningScreen> {
       setState(() {
         _voiceCloningState = VoiceCloningState.error;
       });
-      _showErrorDialog('$e');
+      _showRetryDialog('Voice cloning failed. Would you like to try again?');
     }
   }
 
@@ -229,6 +229,38 @@ class VoiceCloningScreenState extends State<VoiceCloningScreen> {
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRetryDialog(String message) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Error'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _handleSkip();
+            },
+            child: const Text('Skip'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              setState(() {
+                _currentSentenceIndex = 0;
+                _isComplete = false;
+                _voiceCloningState = VoiceCloningState.recording;
+                _recordingStatus = 'Ready to start';
+              });
+            },
+            child: const Text('Retry'),
           ),
         ],
       ),
