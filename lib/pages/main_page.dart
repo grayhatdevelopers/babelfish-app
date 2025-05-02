@@ -1,4 +1,5 @@
 import 'package:audio_recorder/models/language_model.dart';
+import 'package:audio_recorder/models/websocket_config.dart';
 import 'package:audio_recorder/pages/login_page.dart';
 import 'package:audio_recorder/services/storage_service.dart';
 import 'package:flutter/material.dart';
@@ -28,8 +29,7 @@ class TranslationAppState extends State<TranslationApp> {
   double heightTop = 100;
   double heightBottom = 100;
 
-  String serverUrl =
-      'ws://ec2-13-50-56-128.eu-north-1.compute.amazonaws.com:8001/ws/client';
+  String serverUrl = WebSocketConfig.serverUrl;
   String? userID = 'ronaldo'; // Changed to nullable
   String? tokenJWT = ''; // Changed to nullable
 
@@ -767,10 +767,19 @@ class TranslationAppState extends State<TranslationApp> {
         actions: [
           TextButton(
             onPressed: () {
+              Navigator.pop(context);
+            },
+            child: Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () async {
               setState(() {
                 serverUrl = urlController.text;
                 userID = userController.text;
               });
+              // Save WebSocket URL to storage
+              await StorageService.saveWebsocketUrl(serverUrl);
+              WebSocketConfig.serverUrl = serverUrl;
               Navigator.pop(context);
             },
             child: Text("OK"),

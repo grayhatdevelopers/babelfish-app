@@ -1,10 +1,19 @@
+import 'package:audio_recorder/services/storage_service.dart';
+
 class OmniAPI {
-  static String baseUrl = 'https://2c6f-203-82-54-66.ngrok-free.app';
+  static String baseUrl = 'https://dafa-203-82-54-66.ngrok-free.app';
   final Map<String, String> headers;
 
   OmniAPI({
     this.headers = const {'Content-Type': 'application/json'},
   });
+
+  static Future<void> initializeBaseUrl() async {
+    final savedUrl = await StorageService.getApiUrl();
+    if (savedUrl != null && savedUrl.isNotEmpty) {
+      baseUrl = savedUrl;
+    }
+  }
 
   static Uri get voiceCloneEndpoint => Uri.parse('$baseUrl/upload-wav/');
   static Uri get signupEndpoint => Uri.parse('$baseUrl/auth/signup');

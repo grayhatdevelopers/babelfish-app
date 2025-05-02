@@ -96,6 +96,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ElevatedButton(
             onPressed: () async {
               OmniAPI.baseUrl = _baseUrlController.text;
+              await StorageService.saveApiUrl(_baseUrlController.text);
               if (mounted) {
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(

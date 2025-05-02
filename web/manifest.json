@@ -1,11 +1,11 @@
 {
-    "name": "audio_recorder",
-    "short_name": "audio_recorder",
+    "name": "Omni",
+    "short_name": "Omni",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Omni translation app",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
