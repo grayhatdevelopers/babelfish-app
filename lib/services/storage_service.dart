@@ -9,6 +9,10 @@ class StorageService {
   // New keys for credentials
   static const _savedEmailKey = 'saved_email';
   static const _savedPasswordKey = 'saved_password';
+  // Constants for API URL
+  static const _apiUrlKey = 'api_base_url';
+  // Constants for WebSocket URL
+  static const _websocketUrlKey = 'websocket_url';
 
   static Future<void> saveToken(
     String username,
@@ -61,5 +65,25 @@ class StorageService {
   static Future<void> deleteCredentials() async {
     await _storage.delete(key: _savedEmailKey);
     await _storage.delete(key: _savedPasswordKey);
+  }
+
+  // Save API URL
+  static Future<void> saveApiUrl(String url) async {
+    await _storage.write(key: _apiUrlKey, value: url);
+  }
+
+  // Get API URL
+  static Future<String?> getApiUrl() async {
+    return await _storage.read(key: _apiUrlKey);
+  }
+
+  // Save WebSocket URL
+  static Future<void> saveWebsocketUrl(String url) async {
+    await _storage.write(key: _websocketUrlKey, value: url);
+  }
+
+  // Get WebSocket URL
+  static Future<String?> getWebsocketUrl() async {
+    return await _storage.read(key: _websocketUrlKey);
   }
 }
