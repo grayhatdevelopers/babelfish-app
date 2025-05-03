@@ -1,7 +1,12 @@
+import 'package:audio_recorder/models/api_response.dart';
+import 'package:audio_recorder/models/websocket_config.dart';
 import 'package:audio_recorder/pages/login_page.dart';
 import 'package:flutter/material.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await OmniAPI.initializeBaseUrl();
+  await WebSocketConfig.initializeServerUrl();
   runApp(const MyApp());
 }
 
