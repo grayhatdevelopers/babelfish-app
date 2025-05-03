@@ -1,4 +1,5 @@
 import 'package:audio_recorder/models/language_model.dart';
+import 'package:audio_recorder/models/websocket_config.dart';
 import 'package:audio_recorder/pages/login_page.dart';
 import 'package:audio_recorder/services/storage_service.dart';
 import 'package:flutter/material.dart';
@@ -28,8 +29,7 @@ class TranslationAppState extends State<TranslationApp> {
   double heightTop = 100;
   double heightBottom = 100;
 
-  String serverUrl =
-      'ws://ec2-13-50-56-128.eu-north-1.compute.amazonaws.com:8000/ws/client';
+  String serverUrl = WebSocketConfig.serverUrl;
   String? userID = 'ronaldo'; // Changed to nullable
   String? tokenJWT = ''; // Changed to nullable
 
@@ -58,13 +58,10 @@ class TranslationAppState extends State<TranslationApp> {
       1.0 - (_recorderVolume / -96.0).clamp(0.0, 1.0);
 
   List<Uint8List>? _previewData;
-  List<Uint8List>? _recordedData = [];
 
   double _sampleRate = 0.0; // Default value
 
   static const _printTimeDifferences = false;
-
-  bool isPlaying = false;
 
   @override
   void initState() {
@@ -200,7 +197,6 @@ class TranslationAppState extends State<TranslationApp> {
       _previewData = [];
     } else {
       _previewData = null;
-      _recordedData = [];
     }
 
     setState(() {});
@@ -240,9 +236,6 @@ class TranslationAppState extends State<TranslationApp> {
   Widget _topSection() {
     return GestureDetector(
       onLongPress: () => _showLanguageSelector(true),
-      onTap: () {
-        isExpandedTop ? _toggleRecordingandPlayback() : () {};
-      },
       child: AnimatedContainer(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -268,9 +261,6 @@ class TranslationAppState extends State<TranslationApp> {
   Widget _bottomSection() {
     return GestureDetector(
       onLongPress: () => _showLanguageSelector(false),
-      onTap: () {
-        isExpandedBottom ? _toggleRecordingandPlayback() : () {};
-      },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         decoration: BoxDecoration(
@@ -522,14 +512,9 @@ class TranslationAppState extends State<TranslationApp> {
       print('Sending chunk to server');
     }
     if (_websocketService != null &&
-        (_websocketService?.isWebSocketConnected ?? false) &&
-        !isPlaying) {
+        (_websocketService?.isWebSocketConnected ?? false)) {
       _websocketService?.sendData(_sampleRate, 'ronaldo',
           isExpandedTop ? topLanguage : bottomLanguage, chunk);
-    } else {
-      if (kDebugMode) {
-        print('WebSocket is not connected');
-      }
     }
   }
 
@@ -594,24 +579,7 @@ class TranslationAppState extends State<TranslationApp> {
       }
       return;
     }
-    if (recorderEnabled && !isWebSocketConnected) {
-      final connected = await _connectWebSocket();
-      if (connected) {
-      } else {
-        isInitialized = false;
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                  'Failed to connect to the server. Please check your connection and try again.'),
-              duration: Duration(seconds: 3),
-            ),
-          );
-        }
-        _stopRecording();
-      }
-    }
-    if (true) {
+    if (await _connectWebSocket()) {
       if (kDebugMode) {
         print('Creating audio engine');
       }
@@ -619,7 +587,6 @@ class TranslationAppState extends State<TranslationApp> {
         final audioEngineNew = RealtimeAudio(recorderEnabled: recorderEnabled);
         await audioEngineNew.isInitialized;
 
-        print('Audio engine created');
         setState(() {
           audioEngine = audioEngineNew;
           _state = audioEngine!.state;
@@ -650,6 +617,18 @@ class TranslationAppState extends State<TranslationApp> {
           );
         }
       }
+    } else {
+      isInitialized = false;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'Failed to connect to the server. Please check your connection and try again.'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      _stopRecording();
     }
   }
 
@@ -667,19 +646,12 @@ class TranslationAppState extends State<TranslationApp> {
     await audioEngine?.dispose();
     audioEngine = null;
 
-    // // Close WebSocket connection
-    // if (_websocketService != null) {
-    //   await _websocketService!.close();
-    //   _websocketService = null;
-    // }
-    isInitialized = false;
-  }
-
-  Future<void> _disconnectWebSocket() async {
+    // Close WebSocket connection
     if (_websocketService != null) {
       await _websocketService!.close();
       _websocketService = null;
     }
+    isInitialized = false;
   }
 
   Future<void> clearQueue() async {
@@ -709,12 +681,8 @@ class TranslationAppState extends State<TranslationApp> {
           }
           _processText(message);
         }, (audioData) {
-          if (isPlaying) {
-            _previewData?.add(audioData);
-            audioEngine?.queueChunk(audioData);
-          } else {
-            _recordedData?.add(audioData);
-          }
+          _previewData?.add(audioData);
+          audioEngine?.queueChunk(audioData);
         });
       });
       return true;
@@ -722,24 +690,7 @@ class TranslationAppState extends State<TranslationApp> {
     return false;
   }
 
-  void _toggleRecordingandPlayback() async {
-    if (!isPlaying) {
-      setState(() {
-        isPlaying = true;
-      });
-      if (_previewData == null || _previewData!.isEmpty) {
-        _previewData = [];
-      }
-      _recordedData?.forEach((data) => _previewData?.add(data));
-      _recordedData?.forEach((data) => audioEngine?.queueChunk(data));
-    } else {
-      setState(() {
-        isPlaying = false;
-      });
-    }
-  }
-
-  Future<void> _toggleRecording() async {
+  void _toggleRecording() async {
     if (isRecording) {
       setState(() {
         isRecording = false;
@@ -760,21 +711,6 @@ class TranslationAppState extends State<TranslationApp> {
       await startPlayer();
       _togglePreviewRecording();
     }
-  }
-
-  Future<void> startRecording() async {
-    print('Is Initialized: $isInitialized');
-    if (!isInitialized) {
-      await createAudioEngine(recorderEnabled: true);
-    }
-    if (!isWebSocketConnected) {
-      await _connectWebSocket();
-    }
-    setState(() {
-      isRecording = true;
-    });
-    await startPlayer();
-    _togglePreviewRecording();
   }
 
   void _showSettingsDialog() {
@@ -831,10 +767,19 @@ class TranslationAppState extends State<TranslationApp> {
         actions: [
           TextButton(
             onPressed: () {
+              Navigator.pop(context);
+            },
+            child: Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () async {
               setState(() {
                 serverUrl = urlController.text;
                 userID = userController.text;
               });
+              // Save WebSocket URL to storage
+              await StorageService.saveWebsocketUrl(serverUrl);
+              WebSocketConfig.serverUrl = serverUrl;
               Navigator.pop(context);
             },
             child: Text("OK"),
