@@ -87,6 +87,7 @@ class TranslationAppState extends State<TranslationApp> {
 
   Future<void> _initializeUser() async {
     final (token, _, username, language) = await StorageService.getStoredData();
+    print(username);
     if (username != null && mounted) {
       setState(() {
         userID = username;
@@ -132,7 +133,6 @@ class TranslationAppState extends State<TranslationApp> {
           final dragDistance =
               heightTop - MediaQuery.of(context).size.height * 0.5;
           final threshold = MediaQuery.of(context).size.height * 0.3;
-
           setState(() {
             if (dragDistance.abs() > threshold) {
               _toggleSectionExpansion(dragDistance > 0);
@@ -204,9 +204,7 @@ class TranslationAppState extends State<TranslationApp> {
 
   void _toggleSectionExpansion(isTop) {
     setState(() {
-      isExpandedTop = isTop;
-      isExpandedBottom = !isTop;
-
+      print("Toofle");
       if (isExpandedTop) {
         heightTop = MediaQuery.of(context).size.height * 1;
         heightBottom = MediaQuery.of(context).size.height * 0;
@@ -214,6 +212,10 @@ class TranslationAppState extends State<TranslationApp> {
         heightTop = MediaQuery.of(context).size.height * 0;
         heightBottom = MediaQuery.of(context).size.height * 1;
       }
+      if (isExpandedTop && isTop) return;
+      if (isExpandedBottom && !isTop) return;
+      isExpandedTop = isTop;
+      isExpandedBottom = !isTop;
       if (isRecording) {
         _toggleRecording();
       }
@@ -513,7 +515,7 @@ class TranslationAppState extends State<TranslationApp> {
     }
     if (_websocketService != null &&
         (_websocketService?.isWebSocketConnected ?? false)) {
-      _websocketService?.sendData(_sampleRate, 'ronaldo',
+      _websocketService?.sendData(_sampleRate, userID ?? 'ronaldo',
           isExpandedTop ? topLanguage : bottomLanguage, chunk);
     }
   }

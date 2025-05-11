@@ -1,7 +1,8 @@
 import 'package:audio_recorder/services/storage_service.dart';
 
 class OmniAPI {
-  static String baseUrl = 'https://dafa-203-82-54-66.ngrok-free.app';
+  static String baseUrl =
+      'http://ec2-51-21-138-103.eu-north-1.compute.amazonaws.com:8081';
   final Map<String, String> headers;
 
   OmniAPI({

@@ -18,6 +18,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Babelfish',
       themeMode: ThemeMode.dark, // Set default theme mode to dark
+      debugShowCheckedModeBanner: false,
       darkTheme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.dark,

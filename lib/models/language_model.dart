@@ -20,6 +20,14 @@ class Languages {
       flagOrientation: FlagOrientation.vertical,
       colors: [Colors.blue, Colors.red, Colors.white],
     ),
+    "hi": LanguageModel(
+      name: "हिन्दी",
+      code: "hi",
+      downText: "हिन्दी में अनुवाद करने के लिए नीचे स्वाइप करें",
+      upText: "हिन्दी में अनुवाद करने के लिए ऊपर स्वाइप करें",
+      flagOrientation: FlagOrientation.horizontal,
+      colors: [Colors.orange, Colors.white, Colors.green],
+    ),
     "es": LanguageModel(
       name: "Español",
       code: "es",

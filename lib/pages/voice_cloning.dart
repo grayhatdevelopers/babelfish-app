@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:audio_recorder/pages/main_page.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -49,6 +50,12 @@ class VoiceCloningScreenState extends State<VoiceCloningScreen> {
   Future<void> _initAudioFile() async {
     final tempDir = await getTemporaryDirectory();
     _audioFile = '${tempDir.path}/voice_cloning.wav';
+
+    // Ensure the file exists and is writable
+    final file = File(_audioFile);
+    if (!await file.exists()) {
+      await file.create(recursive: true);
+    }
   }
 
   Future<void> _checkAndRequestPermissions() async {
@@ -107,7 +114,6 @@ class VoiceCloningScreenState extends State<VoiceCloningScreen> {
       _initializeRecorder();
       if (_audioRecorder == null) {
         _showErrorDialog('Recorder is not initialized.');
-
         return;
       }
     }
@@ -115,11 +121,14 @@ class VoiceCloningScreenState extends State<VoiceCloningScreen> {
     try {
       // Only start a new recording if we're at the beginning
       if (_currentSentenceIndex == 0) {
+        // For Android compatibility, ensure we're using the correct codec and settings
         await _audioRecorder!.startRecorder(
           toFile: _audioFile,
           codec: Codec.pcm16WAV,
           audioSource: AudioSource.microphone,
           sampleRate: _sampleRate,
+          bitRate: 16 * 1000, // 16 kbps
+          numChannels: 1, // Mono recording for better compatibility
         );
       }
 
@@ -138,7 +147,7 @@ class VoiceCloningScreenState extends State<VoiceCloningScreen> {
             'Recording sentence ${_currentSentenceIndex + 1} of ${VoiceCloningSentences.sentences.length}';
       });
     } catch (e) {
-      _showErrorDialog('Failed to start recording.');
+      _showErrorDialog('Failed to start recording: ${e.toString()}');
       setState(() {
         _isRecording = false;
         _recordingStatus = 'Error';
