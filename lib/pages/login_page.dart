@@ -265,6 +265,9 @@ class _LoginScreenState extends State<LoginScreen> {
           _loginPasswordController.text,
         );
 
+        // Restore any previously saved language preferences
+        await StorageService.restoreLanguagePreferences();
+
         if (mounted) {
           // Show success message
           ScaffoldMessenger.of(context).showSnackBar(
@@ -308,6 +311,12 @@ class _LoginScreenState extends State<LoginScreen> {
           _signupEmailController.text,
           _signupPasswordController.text,
         );
+
+        // For new users, set their selected signup language as the bottom language preference
+        await StorageService.saveBottomLanguagePreference(_selectedLanguage);
+
+        // But also restore any other preserved preferences (top language, full sentence mode)
+        await StorageService.restoreLanguagePreferences();
 
         if (mounted) {
           // Show success message
