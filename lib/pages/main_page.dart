@@ -7,11 +7,16 @@ import 'package:flutter/services.dart';
 import 'package:flutter_sfsymbols/flutter_sfsymbols.dart';
 
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:audio_recorder/services/response_handler.dart';
 import 'package:audio_recorder/services/websocket_service.dart';
 import 'package:realtime_audio/realtime_audio.dart';
+
+// Import WebSocketErrorType directly
+import 'package:audio_recorder/services/websocket_service.dart'
+    show WebSocketErrorType, WebSocketError;
 
 class TranslationApp extends StatefulWidget {
   const TranslationApp({super.key});
@@ -76,6 +81,11 @@ class TranslationAppState extends State<TranslationApp> {
 
   // For handling timing of player updates
   DateTime? _lastPlayerChunk;
+
+  // Add variables for error handling
+  String? _websocketErrorMessage;
+  Timer? _errorDisplayTimer;
+  bool _showErrorOverlay = false;
 
   @override
   void initState() {
@@ -173,6 +183,8 @@ class TranslationAppState extends State<TranslationApp> {
   @override
   void dispose() {
     destroyAudioEngine();
+    _websocketService?.dispose(); // Dispose the WebSocket service properly
+    _errorDisplayTimer?.cancel();
     super.dispose();
   }
 
@@ -183,84 +195,132 @@ class TranslationAppState extends State<TranslationApp> {
       heightBottom = MediaQuery.of(context).size.height * 0.5;
       _isLayoutInitialized = true;
     }
+
     return Scaffold(
       backgroundColor: Colors.black,
-      body: GestureDetector(
-        onVerticalDragUpdate: (details) {
-          setState(() {
-            // Adjust the heights based on the drag delta
-            heightTop += details.primaryDelta!;
-            heightBottom -= details.primaryDelta!;
+      body: Stack(
+        children: <Widget>[
+          // Main content with gesture detector
+          GestureDetector(
+            onVerticalDragUpdate: (details) {
+              setState(() {
+                // Adjust the heights based on the drag delta
+                heightTop += details.primaryDelta!;
+                heightBottom -= details.primaryDelta!;
 
-            // Ensure the heights stay within valid bounds
-            if (heightTop < 0) {
-              heightTop = 0;
-              heightBottom = MediaQuery.of(context).size.height;
-            } else if (heightBottom < 0) {
-              heightBottom = 0;
-              heightTop = MediaQuery.of(context).size.height;
-            }
-          });
-        },
-        onVerticalDragEnd: (details) {
-          final dragDistance =
-              heightTop - MediaQuery.of(context).size.height * 0.5;
-          final threshold = MediaQuery.of(context).size.height * 0.3;
-          setState(() {
-            if (dragDistance.abs() > threshold) {
-              _toggleSectionExpansion(dragDistance > 0);
-            } else {
-              _stopRecording();
-            }
-          });
-        },
-        child: Stack(
-          children: [
-            Column(
-              children: [
-                _topSection(),
-                _bottomSection(),
+                // Ensure the heights stay within valid bounds
+                if (heightTop < 0) {
+                  heightTop = 0;
+                  heightBottom = MediaQuery.of(context).size.height;
+                } else if (heightBottom < 0) {
+                  heightBottom = 0;
+                  heightTop = MediaQuery.of(context).size.height;
+                }
+              });
+            },
+            onVerticalDragEnd: (details) {
+              final dragDistance =
+                  heightTop - MediaQuery.of(context).size.height * 0.5;
+              final threshold = MediaQuery.of(context).size.height * 0.3;
+              setState(() {
+                if (dragDistance.abs() > threshold) {
+                  _toggleSectionExpansion(dragDistance > 0);
+                } else {
+                  _stopRecording();
+                }
+              });
+            },
+            child: Stack(
+              children: <Widget>[
+                Column(
+                  children: <Widget>[
+                    _topSection(),
+                    _bottomSection(),
+                  ],
+                ),
+                if (!isExpandedTop && !isExpandedBottom)
+                  AnimatedPositioned(
+                    duration: const Duration(milliseconds: 300),
+                    top: heightTop - 4,
+                    left: 0,
+                    right: 0,
+                    child: Opacity(
+                      opacity: (1 -
+                              (((heightTop /
+                                              MediaQuery.of(context)
+                                                  .size
+                                                  .height) -
+                                          0.5)
+                                      .abs() *
+                                  2))
+                          .clamp(0.0, 1.0),
+                      child: Container(
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[200]?.withAlpha(150) ??
+                              Colors.grey.withAlpha(150),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.grey.withAlpha(200),
+                              blurRadius: 4,
+                              spreadRadius: 0,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                Positioned(
+                  top: 40,
+                  right: 16,
+                  child: IconButton(
+                    onPressed: _showSettingsDialog,
+                    icon: const Icon(Icons.settings),
+                  ),
+                ),
               ],
             ),
-            if (!isExpandedTop && !isExpandedBottom)
-              AnimatedPositioned(
-                duration: const Duration(
-                    milliseconds:
-                        300), // Match the sections' animation duration
-                top: heightTop - 4, // Center the 5px separator
-                left: 0,
-                right: 0,
-                child: Opacity(
-                  opacity: (1 -
-                          (((heightTop / MediaQuery.of(context).size.height) -
-                                      0.5)
-                                  .abs() *
-                              2))
-                      .clamp(0.0, 1.0),
-                  child: Container(
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[200]?.withAlpha(150) ??
-                          Colors.grey.withAlpha(150),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.grey.withAlpha(200),
-                          blurRadius: 4,
-                          spreadRadius: 0,
+          ),
+
+          // Error overlay
+          if (_showErrorOverlay && _websocketErrorMessage != null)
+            Positioned(
+              top: 50,
+              left: 20,
+              right: 20,
+              child: Material(
+                elevation: 8,
+                borderRadius: BorderRadius.circular(8),
+                color: Colors.red.shade800,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline,
+                          color: Colors.white, size: 24),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          _websocketErrorMessage!,
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 14),
                         ),
-                      ],
-                    ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () {
+                          setState(() {
+                            _showErrorOverlay = false;
+                          });
+                        },
+                      ),
+                    ],
                   ),
                 ),
               ),
-            Positioned(
-              top: 40,
-              right: 16,
-              child: IconButton(
-                  onPressed: _showSettingsDialog, icon: Icon(Icons.settings)),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -934,13 +994,10 @@ class TranslationAppState extends State<TranslationApp> {
   }
 
   Future<void> destroyAudioEngine() async {
-    // First stop the audio engine
-    await stopPlayer();
-
-    // Cancel all subscriptions
-    for (final subscription in _subscriptions ?? const []) {
+    // Cancel subscriptions
+    _subscriptions?.forEach((subscription) async {
       await subscription.cancel();
-    }
+    });
     _subscriptions?.clear();
 
     // Dispose audio engine
@@ -966,8 +1023,61 @@ class TranslationAppState extends State<TranslationApp> {
     }
   }
 
+  void _showError(String errorMessage,
+      {Duration duration = const Duration(seconds: 5)}) {
+    setState(() {
+      _websocketErrorMessage = errorMessage;
+      _showErrorOverlay = true;
+    });
+
+    // Auto-hide the error after duration
+    _errorDisplayTimer?.cancel();
+    _errorDisplayTimer = Timer(duration, () {
+      if (mounted) {
+        setState(() {
+          _showErrorOverlay = false;
+        });
+      }
+    });
+  }
+
   Future<bool> _connectWebSocket() async {
     _websocketService = WebsocketService();
+
+    // Listen for WebSocket errors
+    _websocketService!.errorStream.listen((error) {
+      String userFriendlyMessage;
+
+      switch (error.type) {
+        case WebSocketErrorType.connectionFailed:
+          userFriendlyMessage =
+              'Failed to connect to the server. Please check your internet connection and try again.';
+          break;
+        case WebSocketErrorType.connectionTimeout:
+          userFriendlyMessage =
+              'Connection timed out. The server is taking too long to respond.';
+          break;
+        case WebSocketErrorType.connectionClosed:
+          userFriendlyMessage =
+              'Connection closed unexpectedly. Please try reconnecting.';
+          break;
+        case WebSocketErrorType.messageSendFailed:
+          userFriendlyMessage =
+              'Failed to send message to the server. Please check your connection.';
+          break;
+        case WebSocketErrorType.serverError:
+          userFriendlyMessage =
+              'Server error occurred. Please try again later.';
+          break;
+        default:
+          userFriendlyMessage =
+              'An unexpected error occurred: ${error.message}';
+          break;
+      }
+
+      _showError(userFriendlyMessage);
+    });
+
     isWebSocketConnected = await _websocketService?.connect(serverUrl) ?? false;
     if (_websocketService?.isWebSocketConnected ?? false) {
       if (kDebugMode) {
@@ -987,8 +1097,14 @@ class TranslationAppState extends State<TranslationApp> {
         });
       });
       return true;
+    } else {
+      // If connection failed and we don't have an error message yet (fallback)
+      if (!_showErrorOverlay) {
+        _showError(
+            'Failed to connect to the server. Please check your internet connection and try again.');
+      }
+      return false;
     }
-    return false;
   }
 
   void _toggleRecording() async {
@@ -1004,7 +1120,11 @@ class TranslationAppState extends State<TranslationApp> {
         await createAudioEngine(recorderEnabled: true);
       }
       if (!isWebSocketConnected) {
-        await _connectWebSocket();
+        final connected = await _connectWebSocket();
+        if (!connected) {
+          // Don't proceed with recording if connection failed
+          return;
+        }
       }
 
       // Save language preferences at the start of recording
