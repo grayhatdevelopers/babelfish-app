@@ -24,19 +24,26 @@ class TranslationAppState extends State<TranslationApp> {
   bool isExpandedTop = false;
   bool isExpandedBottom = false;
   bool isWebSocketConnected = false;
-  String topLanguage = 'fr';
-  String bottomLanguage = 'it';
+  // Default languages set to English for both (will be overridden by stored preferences)
+  String topLanguage = 'en';
+  String bottomLanguage = 'en';
   double heightTop = 100;
   double heightBottom = 100;
+
+  // Add fullSentence feature
+  bool fullSentence = true;
+  List<String> translatedSentences = [];
+  String translatedText = '';
+
+  // Add original transcript tracking
+  String originalText = '';
+  bool showOriginalText = true; // Toggle to show/hide original text
 
   String serverUrl = WebSocketConfig.serverUrl;
   String? userID = 'ronaldo'; // Changed to nullable
   String? tokenJWT = ''; // Changed to nullable
 
   bool isRecording = false;
-
-  String translatedText = '';
-  List<String> translatedSentences = [];
 
   RealtimeAudio? audioEngine;
   List<StreamSubscription<dynamic>>? _subscriptions;
@@ -63,6 +70,13 @@ class TranslationAppState extends State<TranslationApp> {
 
   static const _printTimeDifferences = false;
 
+  // Add constants for text animation
+  static const Duration textAnimationDuration = Duration(milliseconds: 300);
+  static const Curve textAnimationCurve = Curves.easeInOut;
+
+  // For handling timing of player updates
+  DateTime? _lastPlayerChunk;
+
   @override
   void initState() {
     super.initState();
@@ -87,13 +101,72 @@ class TranslationAppState extends State<TranslationApp> {
 
   Future<void> _initializeUser() async {
     final (token, _, username, language) = await StorageService.getStoredData();
-    print(username);
+    if (kDebugMode) {
+      print("INIT USER - Username: $username, Saved Language: $language");
+    }
     if (username != null && mounted) {
       setState(() {
         userID = username;
         tokenJWT = token;
-        bottomLanguage = language ?? 'it';
       });
+    }
+
+    // Load top language preference
+    final topLangPreference = await StorageService.getTopLanguage();
+    if (mounted) {
+      setState(() {
+        // Use the saved top language preference, or default to English if not set
+        topLanguage = topLangPreference ?? 'en';
+        if (kDebugMode) {
+          print("TOP LANGUAGE SET TO: $topLanguage");
+        }
+      });
+    }
+
+    // For consistency, also load bottom language preference directly using the new method
+    final bottomLangPreference = await StorageService.getBottomLanguage();
+    if (mounted) {
+      setState(() {
+        // Use saved bottom language or default to English if not set
+        bottomLanguage = bottomLangPreference ?? 'en';
+        if (kDebugMode) {
+          print("BOTTOM LANGUAGE LOADED DIRECTLY: $bottomLanguage");
+        }
+      });
+    }
+
+    // Load full sentence mode preference
+    final savedFullSentenceMode = await StorageService.getFullSentenceMode();
+    if (mounted) {
+      setState(() {
+        fullSentence = savedFullSentenceMode;
+        if (kDebugMode) {
+          print("FULL SENTENCE MODE: $fullSentence");
+        }
+      });
+    }
+
+    // Load show original text preference - Default to true if not set
+    final savedShowOriginalText = await StorageService.getShowOriginalText();
+    if (mounted) {
+      setState(() {
+        showOriginalText = savedShowOriginalText;
+        if (kDebugMode) {
+          print("SHOW ORIGINAL TEXT: $showOriginalText");
+        }
+      });
+    }
+
+    // Ensure the language preferences are saved
+    await StorageService.saveBottomLanguagePreference(bottomLanguage);
+    await StorageService.saveTopLanguagePreference(topLanguage);
+
+    // Ensure the original text display is enabled by default
+    if (showOriginalText == false) {
+      setState(() {
+        showOriginalText = true;
+      });
+      await StorageService.saveShowOriginalText(true);
     }
   }
 
@@ -204,7 +277,7 @@ class TranslationAppState extends State<TranslationApp> {
 
   void _toggleSectionExpansion(isTop) {
     setState(() {
-      print("Toofle");
+      print("Toggling expansion - isTop: $isTop");
       if (isExpandedTop) {
         heightTop = MediaQuery.of(context).size.height * 1;
         heightBottom = MediaQuery.of(context).size.height * 0;
@@ -214,12 +287,66 @@ class TranslationAppState extends State<TranslationApp> {
       }
       if (isExpandedTop && isTop) return;
       if (isExpandedBottom && !isTop) return;
+
       isExpandedTop = isTop;
       isExpandedBottom = !isTop;
+
+      // Update the currentLanguage based on which section is active
+      if (isExpandedTop && Languages.languages.containsKey(topLanguage)) {
+        currentLanguage = Languages.languages[topLanguage]!;
+        if (kDebugMode) {
+          print(
+              "ACTIVE LANGUAGE SWITCHED TO TOP: ${currentLanguage.name} (${currentLanguage.code})");
+        }
+      } else if (isExpandedBottom &&
+          Languages.languages.containsKey(bottomLanguage)) {
+        currentLanguage = Languages.languages[bottomLanguage]!;
+        if (kDebugMode) {
+          print(
+              "ACTIVE LANGUAGE SWITCHED TO BOTTOM: ${currentLanguage.name} (${currentLanguage.code})");
+        }
+      }
+
       if (isRecording) {
         _toggleRecording();
       }
       _toggleRecording();
+    });
+  }
+
+  void _processText(String text, String? original) {
+    translatedSentences.add(text);
+
+    // Only log in debug mode
+    if (kDebugMode && original != null) {
+      print('Original text: $original');
+      print('Translated text: $text');
+    }
+
+    setState(() {
+      if (fullSentence) {
+        translatedText = text; // Replace with full sentence
+
+        // Set original text when available
+        if (original != null && original.isNotEmpty) {
+          originalText = original;
+        }
+      } else {
+        translatedText += '$text '; // Append text as before
+
+        // Also append original text if available
+        if (original != null && original.isNotEmpty) {
+          originalText += '$original ';
+        }
+      }
+    });
+  }
+
+  void _resetTexts() {
+    setState(() {
+      translatedText = '';
+      originalText = '';
+      translatedSentences = [];
     });
   }
 
@@ -228,8 +355,7 @@ class TranslationAppState extends State<TranslationApp> {
     heightTop = MediaQuery.of(context).size.height * 0.5;
     isExpandedTop = false;
     isExpandedBottom = false;
-    translatedSentences = [];
-    translatedText = '';
+    _resetTexts();
     if (isRecording) {
       _toggleRecording();
     }
@@ -290,30 +416,78 @@ class TranslationAppState extends State<TranslationApp> {
   Widget _textDisplayTop() {
     return Column(
       children: [
-        Spacer(),
-        Center(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Text(
-              translatedText,
-              style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black),
-              textAlign: TextAlign.center,
+        const SizedBox(height: 80), // Add space at the top for better centering
+        // Translated text with bold styling centered in the top half
+        Expanded(
+          flex: 3,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Main translated text
+                AnimatedSwitcher(
+                  duration: textAnimationDuration,
+                  child: Text(
+                    translatedText,
+                    key: ValueKey<String>(translatedText),
+                    style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                // Original text underneath with less opacity
+                if (showOriginalText && originalText.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  AnimatedSwitcher(
+                    duration: textAnimationDuration,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16.0, vertical: 8.0),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.02),
+                        borderRadius: BorderRadius.circular(8.0),
+                      ),
+                      child: Text(
+                        "You said: \"$originalText\"",
+                        key: ValueKey<String>(originalText),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w300, // Lighter weight
+                          fontStyle: FontStyle.italic,
+                          color: Colors.black
+                              .withValues(alpha: 0.4), // Lower opacity
+                          letterSpacing: 0.2,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ),
-        Spacer(),
-        Text(
-          Languages.languages[bottomLanguage]!.upText,
-          style: TextStyle(
-              fontSize: 14, fontWeight: FontWeight.w300, color: Colors.black),
-        ),
-        const Icon(
-          SFSymbols.chevron_compact_up,
-          size: 40,
-          color: Colors.black,
+        Expanded(
+          flex: 1,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Text(
+                Languages.languages[bottomLanguage]!.upText,
+                style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w300,
+                    color: Colors.black),
+              ),
+              const Icon(
+                SFSymbols.chevron_compact_up,
+                size: 40,
+                color: Colors.black,
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -334,21 +508,62 @@ class TranslationAppState extends State<TranslationApp> {
           style: TextStyle(
               fontSize: 14, fontWeight: FontWeight.w300, color: Colors.black),
         ),
-        Spacer(),
-        Center(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Text(
-              translatedText,
-              style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black),
-              textAlign: TextAlign.center,
+        // Main content area with both translated and original text
+        Expanded(
+          flex: 3,
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Main translated text
+                  AnimatedSwitcher(
+                    duration: textAnimationDuration,
+                    child: Text(
+                      translatedText,
+                      key: ValueKey<String>(translatedText),
+                      style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  // Original text underneath with less opacity
+                  if (showOriginalText && originalText.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    AnimatedSwitcher(
+                      duration: textAnimationDuration,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16.0, vertical: 8.0),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.02),
+                          borderRadius: BorderRadius.circular(8.0),
+                        ),
+                        child: Text(
+                          "You said: \"$originalText\"",
+                          key: ValueKey<String>(originalText),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w300, // Lighter weight
+                            fontStyle: FontStyle.italic,
+                            color: Colors.black
+                                .withValues(alpha: 0.4), // Lower opacity
+                            letterSpacing: 0.2,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
         ),
-        Spacer(),
+        const Spacer(),
       ],
     );
   }
@@ -359,6 +574,7 @@ class TranslationAppState extends State<TranslationApp> {
           ? 1.0
           : heightTop / (MediaQuery.of(context).size.height * 0.5),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Spacer(),
           Text(
@@ -372,9 +588,10 @@ class TranslationAppState extends State<TranslationApp> {
             style: TextStyle(
                 fontSize: 14, fontWeight: FontWeight.w300, color: Colors.black),
           ),
+          SizedBox(height: 4),
           const Icon(
             SFSymbols.chevron_compact_down,
-            size: 40,
+            size: 36,
             color: Colors.black,
           ),
         ],
@@ -389,12 +606,14 @@ class TranslationAppState extends State<TranslationApp> {
           : heightBottom / (MediaQuery.of(context).size.height * 0.5),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
           const Icon(
             SFSymbols.chevron_compact_up,
-            size: 40,
+            size: 36,
             color: Colors.black,
           ),
+          SizedBox(height: 4),
           Text(
             Languages.languages[bottomLanguage]!.upText,
             style: TextStyle(
@@ -412,7 +631,7 @@ class TranslationAppState extends State<TranslationApp> {
     );
   }
 
-  // Add this method to the TranslationAppState class
+  // Fixed version of _showLanguageSelector method
   void _showLanguageSelector(bool isTop) {
     showModalBottomSheet(
       context: context,
@@ -477,14 +696,70 @@ class TranslationAppState extends State<TranslationApp> {
                         language.name,
                         style: TextStyle(color: Colors.white),
                       ),
-                      onTap: () {
-                        setState(() {
-                          if (isTop) {
+                      onTap: () async {
+                        // Store old language for logging
+                        final oldLanguage =
+                            isTop ? topLanguage : bottomLanguage;
+
+                        if (isTop) {
+                          setState(() {
                             topLanguage = langCode;
-                          } else {
-                            bottomLanguage = langCode;
+                          });
+
+                          // Save the chosen top language preference with debug logging
+                          if (kDebugMode) {
+                            print(
+                                "SAVING TOP LANGUAGE PREFERENCE: $langCode (was: $oldLanguage)");
                           }
-                        });
+                          await StorageService.saveTopLanguagePreference(
+                              langCode);
+
+                          // Verify the save worked
+                          String? savedTopLang =
+                              await StorageService.getTopLanguage();
+                          if (kDebugMode) {
+                            print("VERIFIED SAVED TOP LANGUAGE: $savedTopLang");
+                          }
+
+                          // Update current language if top section is active
+                          if (isExpandedTop &&
+                              Languages.languages.containsKey(langCode)) {
+                            currentLanguage = Languages.languages[langCode]!;
+                            if (kDebugMode) {
+                              print(
+                                  "UPDATED CURRENT LANGUAGE TO: ${currentLanguage.name} (TOP ACTIVE)");
+                            }
+                          }
+                        } else {
+                          setState(() {
+                            bottomLanguage = langCode;
+                          });
+
+                          // Save the chosen bottom language preference with debug logging
+                          if (kDebugMode) {
+                            print(
+                                "SAVING BOTTOM LANGUAGE PREFERENCE: $langCode (was: $oldLanguage)");
+                          }
+                          await StorageService.saveBottomLanguagePreference(
+                              langCode);
+
+                          // Verify the save worked
+                          String? savedLang =
+                              await StorageService.getBottomLanguage();
+                          if (kDebugMode) {
+                            print("VERIFIED SAVED LANGUAGE: $savedLang");
+                          }
+
+                          // Update current language if bottom section is active
+                          if (isExpandedBottom &&
+                              Languages.languages.containsKey(langCode)) {
+                            currentLanguage = Languages.languages[langCode]!;
+                            if (kDebugMode) {
+                              print(
+                                  "UPDATED CURRENT LANGUAGE TO: ${currentLanguage.name} (BOTTOM ACTIVE)");
+                            }
+                          }
+                        }
                         Navigator.pop(context);
                       },
                     );
@@ -498,16 +773,6 @@ class TranslationAppState extends State<TranslationApp> {
     );
   }
 
-  void _processText(String text) {
-    translatedSentences.add(text);
-    setState(() {
-      translatedText += '$text ';
-    });
-  }
-
-  //DateTime? _lastRecorderChunk;
-  DateTime? _lastPlayerChunk;
-
   void _handleRecorderChunk(Uint8List chunk) {
     if (_previewData == null) return;
     if (kDebugMode) {
@@ -515,8 +780,42 @@ class TranslationAppState extends State<TranslationApp> {
     }
     if (_websocketService != null &&
         (_websocketService?.isWebSocketConnected ?? false)) {
-      _websocketService?.sendData(_sampleRate, userID ?? 'ronaldo',
-          isExpandedTop ? topLanguage : bottomLanguage, chunk);
+      String targetLanguage = isExpandedTop ? topLanguage : bottomLanguage;
+
+      // Save language preference each time we record in that language
+      // and ensure currentLanguage is up to date
+      if (isExpandedTop) {
+        if (kDebugMode) {
+          print("RECORDING WITH TOP LANGUAGE: $topLanguage");
+        }
+        StorageService.saveTopLanguagePreference(topLanguage);
+
+        // Update current language if needed
+        if (currentLanguage.code != topLanguage &&
+            Languages.languages.containsKey(topLanguage)) {
+          currentLanguage = Languages.languages[topLanguage]!;
+          if (kDebugMode) {
+            print("UPDATED CURRENT LANGUAGE TO: ${currentLanguage.name}");
+          }
+        }
+      } else {
+        if (kDebugMode) {
+          print("RECORDING WITH BOTTOM LANGUAGE: $bottomLanguage");
+        }
+        StorageService.saveBottomLanguagePreference(bottomLanguage);
+
+        // Update current language if needed
+        if (currentLanguage.code != bottomLanguage &&
+            Languages.languages.containsKey(bottomLanguage)) {
+          currentLanguage = Languages.languages[bottomLanguage]!;
+          if (kDebugMode) {
+            print("UPDATED CURRENT LANGUAGE TO: ${currentLanguage.name}");
+          }
+        }
+      }
+
+      _websocketService?.sendData(
+          _sampleRate, userID ?? 'ronaldo', targetLanguage, chunk);
     }
   }
 
@@ -677,11 +976,11 @@ class TranslationAppState extends State<TranslationApp> {
       _websocketService?.sendMessage(userID ?? 'ronaldo');
 
       _websocketService?.startListening((message) {
-        ResponseHandler.handleReponse(message, (message) {
+        ResponseHandler.handleReponse(message, (message, originalText) {
           if (kDebugMode) {
             print('Message from Server: $message');
           }
-          _processText(message);
+          _processText(message, originalText);
         }, (audioData) {
           _previewData?.add(audioData);
           audioEngine?.queueChunk(audioData);
@@ -707,6 +1006,21 @@ class TranslationAppState extends State<TranslationApp> {
       if (!isWebSocketConnected) {
         await _connectWebSocket();
       }
+
+      // Save language preferences at the start of recording
+      if (isExpandedTop) {
+        if (kDebugMode) {
+          print("SAVING TOP LANGUAGE AT START OF RECORDING: $topLanguage");
+        }
+        await StorageService.saveTopLanguagePreference(topLanguage);
+      } else {
+        if (kDebugMode) {
+          print(
+              "SAVING BOTTOM LANGUAGE AT START OF RECORDING: $bottomLanguage");
+        }
+        await StorageService.saveBottomLanguagePreference(bottomLanguage);
+      }
+
       setState(() {
         isRecording = true;
       });
@@ -739,6 +1053,60 @@ class TranslationAppState extends State<TranslationApp> {
                 hintText: "Enter UserID here",
                 labelText: "User ID",
               ),
+            ),
+            const SizedBox(height: 15),
+            SwitchListTile(
+              title: Text("Full Sentence Mode"),
+              subtitle: Text("Show complete sentences instead of word-by-word"),
+              value: fullSentence,
+              onChanged: (value) async {
+                setState(() {
+                  fullSentence = value;
+                });
+
+                // Save the full sentence mode preference
+                await StorageService.saveFullSentenceMode(value);
+                if (kDebugMode) {
+                  print("SAVED FULL SENTENCE MODE: $value");
+                }
+
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(fullSentence
+                        ? 'Full sentence mode enabled'
+                        : 'Word-by-word mode enabled'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              },
+            ),
+            SwitchListTile(
+              title: Text("Show Original Text"),
+              subtitle: Text(
+                  "Display your spoken language underneath the translation"),
+              value: showOriginalText,
+              onChanged: (value) async {
+                setState(() {
+                  showOriginalText = value;
+                });
+
+                // Save the preference
+                await StorageService.saveShowOriginalText(value);
+                if (kDebugMode) {
+                  print("SAVED SHOW ORIGINAL TEXT: $value");
+                }
+
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(value
+                        ? 'Original text display enabled'
+                        : 'Original text display disabled'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 20),
             ElevatedButton(
@@ -782,6 +1150,16 @@ class TranslationAppState extends State<TranslationApp> {
               // Save WebSocket URL to storage
               await StorageService.saveWebsocketUrl(serverUrl);
               WebSocketConfig.serverUrl = serverUrl;
+
+              // Save both language preferences when settings are updated
+              await StorageService.saveBottomLanguagePreference(bottomLanguage);
+              await StorageService.saveTopLanguagePreference(topLanguage);
+
+              if (kDebugMode) {
+                print(
+                    "SAVED LANGUAGES FROM SETTINGS DIALOG - Top: $topLanguage, Bottom: $bottomLanguage");
+              }
+
               Navigator.pop(context);
             },
             child: Text("OK"),
