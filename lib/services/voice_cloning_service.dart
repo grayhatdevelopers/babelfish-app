@@ -1,5 +1,7 @@
 import 'package:audio_recorder/models/api_response.dart';
 import 'package:audio_recorder/services/storage_service.dart';
+import 'package:audio_recorder/utils.dart';
+import 'package:flutter/foundation.dart';
 import '../services/api_service.dart';
 
 class VoiceCloningService {
@@ -21,8 +23,14 @@ class VoiceCloningService {
         throw APIError(
             'Failed to submit voice cloning: ${response.statusCode}');
       }
-    } catch (e) {
-      throw ('$e');
+    } catch (error) {
+      if (kDebugMode) {
+        ErrorLogger().logError('Voice cloning service error',
+            severity: ErrorSeverity.high,
+            source: 'Voice Cloning Service',
+            error: error);
+      }
+      throw ('$error');
     }
   }
 }

@@ -8,6 +8,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:noise_meter/noise_meter.dart';
 import 'package:audio_waveforms/audio_waveforms.dart';
 import 'package:audio_recorder/models/cloning_sentences.dart';
+import 'package:audio_recorder/utils.dart';
 import '../services/voice_cloning_service.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -27,6 +28,7 @@ class VoiceCloningScreenState extends State<VoiceCloningScreen> {
   late String _audioFile; // Changed to late
   bool _isComplete = false;
   VoiceCloningState _voiceCloningState = VoiceCloningState.recording;
+  final ErrorLogger _errorLogger = ErrorLogger();
 
   late NoiseMeter _noiseMeter;
   StreamSubscription<NoiseReading>? _noiseSubscription;
@@ -193,14 +195,12 @@ class VoiceCloningScreenState extends State<VoiceCloningScreen> {
     }
   }
 
-  void _showErrorDialog(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-        duration: Duration(seconds: 3),
-      ),
-    );
+  void _showErrorDialog(String message,
+      {ErrorSeverity severity = ErrorSeverity.medium,
+      String source = 'VoiceCloning'}) {
+    _errorLogger.logError(message, severity: severity, source: source);
+
+    ErrorLogger.showError(context, message);
   }
 
   Future<void> _submitVoiceCloning() async {
@@ -228,6 +228,10 @@ class VoiceCloningScreenState extends State<VoiceCloningScreen> {
       setState(() {
         _voiceCloningState = VoiceCloningState.error;
       });
+
+      _errorLogger.logError('Voice cloning submission failed',
+          severity: ErrorSeverity.high, source: 'VoiceCloning', error: e);
+
       _showRetryDialog('Voice cloning failed. Would you like to try again?');
     }
   }
@@ -249,34 +253,22 @@ class VoiceCloningScreenState extends State<VoiceCloningScreen> {
   }
 
   void _showRetryDialog(String message) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Error'),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _handleSkip();
-            },
-            child: const Text('Skip'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              setState(() {
-                _currentSentenceIndex = 0;
-                _isComplete = false;
-                _voiceCloningState = VoiceCloningState.recording;
-                _recordingStatus = 'Ready to start';
-              });
-            },
-            child: const Text('Retry'),
-          ),
-        ],
-      ),
+    _errorLogger.logError(message,
+        severity: ErrorSeverity.high, source: 'VoiceCloning');
+
+    ErrorLogger.showErrorDialog(
+      context,
+      'Voice Cloning Error',
+      message,
+      onRetry: () {
+        setState(() {
+          _currentSentenceIndex = 0;
+          _isComplete = false;
+          _voiceCloningState = VoiceCloningState.recording;
+          _recordingStatus = 'Ready to start';
+        });
+      },
+      onDismiss: _handleSkip,
     );
   }
 

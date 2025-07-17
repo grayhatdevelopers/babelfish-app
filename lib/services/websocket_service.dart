@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:audio_recorder/utils.dart';
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'dart:convert';
@@ -57,6 +58,10 @@ class WebsocketService {
         } catch (e) {
           if (kDebugMode) {
             print("Failed to establish WebSocket connection: $e");
+            ErrorLogger().logError('Failed to establish WebSocket connection',
+                severity: ErrorSeverity.high,
+                source: 'WebSocket Service',
+                error: e);
           }
           // Clean up the channel on failure
           _channel?.sink
@@ -81,6 +86,10 @@ class WebsocketService {
     } on WebSocketChannelException catch (e) {
       if (kDebugMode) {
         print("WebSocket connection failed: $e");
+        ErrorLogger().logError('WebSocket channel exception',
+            severity: ErrorSeverity.high,
+            source: 'WebSocket Service',
+            error: e);
       }
       isWebSocketConnected = false;
       lastError = WebSocketError(WebSocketErrorType.connectionFailed,
@@ -90,6 +99,10 @@ class WebsocketService {
     } catch (e) {
       if (kDebugMode) {
         print("Unexpected error during WebSocket connection: $e");
+        ErrorLogger().logError('Unexpected WebSocket error',
+            severity: ErrorSeverity.critical,
+            source: 'WebSocket Service',
+            error: e);
       }
       isWebSocketConnected = false;
       lastError = WebSocketError(
@@ -117,6 +130,10 @@ class WebsocketService {
         onError: (error) {
           if (kDebugMode) {
             print("Error: $error");
+            ErrorLogger().logError('WebSocket stream error',
+                severity: ErrorSeverity.high,
+                source: 'WebSocket Service',
+                error: error);
           }
           isWebSocketConnected = false;
           lastError = WebSocketError(WebSocketErrorType.serverError,

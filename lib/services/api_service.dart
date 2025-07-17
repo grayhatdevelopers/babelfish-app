@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:audio_recorder/models/api_response.dart';
+import 'package:audio_recorder/utils.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
 import 'package:http_parser/http_parser.dart';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 
 Future<(Uint8List, http.Response)> postVoiceClone({
   required String filePath,
@@ -62,11 +64,28 @@ Future<(Uint8List, http.Response)> postVoiceClone({
     } else {
       throw APIError.errorCode(response.statusCode);
     }
-  } on FileError {
+  } on FileError catch (error) {
+    // Log file error
+    if (kDebugMode) {
+      ErrorLogger().logError('File error during voice cloning',
+          severity: ErrorSeverity.high, source: 'API Service', error: error);
+    }
     rethrow;
-  } on APIError {
+  } on APIError catch (error) {
+    // Log API error
+    if (kDebugMode) {
+      ErrorLogger().logError('API error during voice cloning',
+          severity: ErrorSeverity.high, source: 'API Service', error: error);
+    }
     rethrow;
-  } catch (e) {
+  } catch (error) {
+    // Log unknown error
+    if (kDebugMode) {
+      ErrorLogger().logError('Unknown error during voice cloning',
+          severity: ErrorSeverity.critical,
+          source: 'API Service',
+          error: error);
+    }
     throw APIError.unknown();
   }
 }
@@ -94,11 +113,19 @@ Future<SignupResponse> signup({
       throw APIError(
           errorBody['detail'] ?? 'Signup failed', response.statusCode);
     }
-  } on TimeoutException {
+  } on TimeoutException catch (error) {
+    if (kDebugMode) {
+      ErrorLogger().logError('Signup request timed out',
+          severity: ErrorSeverity.medium, source: 'API Service', error: error);
+    }
     throw APIError('Request timed out after ${timeout.inSeconds} seconds');
-  } catch (e) {
-    if (e is APIError) rethrow;
-    throw APIError(e.toString());
+  } catch (error) {
+    if (kDebugMode) {
+      ErrorLogger().logError('Signup error',
+          severity: ErrorSeverity.high, source: 'API Service', error: error);
+    }
+    if (error is APIError) rethrow;
+    throw APIError(error.toString());
   }
 }
 
@@ -125,10 +152,18 @@ Future<LoginResponse> login({
       throw APIError(
           errorBody['detail'] ?? 'Login failed', response.statusCode);
     }
-  } on TimeoutException {
+  } on TimeoutException catch (error) {
+    if (kDebugMode) {
+      ErrorLogger().logError('Login request timed out',
+          severity: ErrorSeverity.medium, source: 'API Service', error: error);
+    }
     throw APIError('Request timed out after ${timeout.inSeconds} seconds');
-  } catch (e) {
-    if (e is APIError) rethrow;
-    throw APIError(e.toString());
+  } catch (error) {
+    if (kDebugMode) {
+      ErrorLogger().logError('Login error',
+          severity: ErrorSeverity.high, source: 'API Service', error: error);
+    }
+    if (error is APIError) rethrow;
+    throw APIError(error.toString());
   }
 }

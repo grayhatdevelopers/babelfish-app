@@ -2,6 +2,7 @@ import 'package:audio_recorder/models/language_model.dart';
 import 'package:audio_recorder/models/websocket_config.dart';
 import 'package:audio_recorder/pages/login_page.dart';
 import 'package:audio_recorder/services/storage_service.dart';
+import 'package:audio_recorder/utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_sfsymbols/flutter_sfsymbols.dart';
@@ -86,6 +87,7 @@ class TranslationAppState extends State<TranslationApp> {
   String? _websocketErrorMessage;
   Timer? _errorDisplayTimer;
   bool _showErrorOverlay = false;
+  final ErrorLogger _errorLogger = ErrorLogger();
 
   @override
   void initState() {
@@ -288,36 +290,13 @@ class TranslationAppState extends State<TranslationApp> {
               top: 50,
               left: 20,
               right: 20,
-              child: Material(
-                elevation: 8,
-                borderRadius: BorderRadius.circular(8),
-                color: Colors.red.shade800,
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.error_outline,
-                          color: Colors.white, size: 24),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          _websocketErrorMessage!,
-                          style: const TextStyle(
-                              color: Colors.white, fontSize: 14),
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Colors.white),
-                        onPressed: () {
-                          setState(() {
-                            _showErrorOverlay = false;
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                ),
+              child: ErrorLogger.errorOverlay(
+                errorMessage: _websocketErrorMessage!,
+                onDismiss: () {
+                  setState(() {
+                    _showErrorOverlay = false;
+                  });
+                },
               ),
             ),
         ],
@@ -1024,7 +1003,12 @@ class TranslationAppState extends State<TranslationApp> {
   }
 
   void _showError(String errorMessage,
-      {Duration duration = const Duration(seconds: 5)}) {
+      {Duration duration = const Duration(seconds: 5),
+      ErrorSeverity severity = ErrorSeverity.medium,
+      String source = 'WebSocket'}) {
+    // Log the error through our centralized error logger
+    _errorLogger.logError(errorMessage, severity: severity, source: source);
+
     setState(() {
       _websocketErrorMessage = errorMessage;
       _showErrorOverlay = true;
@@ -1047,35 +1031,46 @@ class TranslationAppState extends State<TranslationApp> {
     // Listen for WebSocket errors
     _websocketService!.errorStream.listen((error) {
       String userFriendlyMessage;
+      ErrorSeverity severity;
 
       switch (error.type) {
         case WebSocketErrorType.connectionFailed:
           userFriendlyMessage =
               'Failed to connect to the server. Please check your internet connection and try again.';
+          severity = ErrorSeverity.high;
           break;
         case WebSocketErrorType.connectionTimeout:
           userFriendlyMessage =
               'Connection timed out. The server is taking too long to respond.';
+          severity = ErrorSeverity.high;
           break;
         case WebSocketErrorType.connectionClosed:
           userFriendlyMessage =
               'Connection closed unexpectedly. Please try reconnecting.';
+          severity = ErrorSeverity.medium;
           break;
         case WebSocketErrorType.messageSendFailed:
           userFriendlyMessage =
               'Failed to send message to the server. Please check your connection.';
+          severity = ErrorSeverity.medium;
           break;
         case WebSocketErrorType.serverError:
           userFriendlyMessage =
               'Server error occurred. Please try again later.';
+          severity = ErrorSeverity.high;
           break;
         default:
           userFriendlyMessage =
               'An unexpected error occurred: ${error.message}';
+          severity = ErrorSeverity.medium;
           break;
       }
 
-      _showError(userFriendlyMessage);
+      _showError(
+        userFriendlyMessage,
+        severity: severity,
+        source: 'WebSocket',
+      );
     });
 
     isWebSocketConnected = await _websocketService?.connect(serverUrl) ?? false;
