@@ -626,18 +626,18 @@ class TranslationAppState extends State<TranslationApp> {
   // Method to handle incoming translation audio
   void _handleTranslationAudio(Uint8List audioData) {
     if (!_isPlayingTranslation) {
-      // Only play automatically if not already playing
+      // Start new translation playback
       setState(() {
         _isPlayingTranslation = true;
         _hasTranslationToPlay = true;
-        _lastTranslationAudio = [audioData]; // Store the audio for repeat
+        _lastTranslationAudio = [audioData]; // Initialize with first chunk
       });
 
-      // Play the audio
+      // Play the first audio chunk
       audioEngine?.queueChunk(audioData);
 
       // Set a timer to reset the playing state
-      Timer(const Duration(milliseconds: 2000), () {
+      Timer(const Duration(milliseconds: 3000), () {
         if (mounted) {
           setState(() {
             _isPlayingTranslation = false;
@@ -645,8 +645,10 @@ class TranslationAppState extends State<TranslationApp> {
         }
       });
     } else {
-      // If already playing, just store the audio for potential repeat
+      // Translation is already playing - add chunk to storage AND play it
       _lastTranslationAudio.add(audioData);
+      // Continue playing subsequent chunks of the same translation
+      audioEngine?.queueChunk(audioData);
     }
   }
 
