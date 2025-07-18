@@ -149,15 +149,15 @@ class TranslationAppState extends State<TranslationApp> {
     }
 
     // Load full sentence mode preference
-    final savedFullSentenceMode = await StorageService.getFullSentenceMode();
-    if (mounted) {
-      setState(() {
-        fullSentence = savedFullSentenceMode;
-        if (kDebugMode) {
-          print("FULL SENTENCE MODE: $fullSentence");
-        }
-      });
-    }
+    // final savedFullSentenceMode = await StorageService.getFullSentenceMode();
+    // if (mounted) {
+    //   setState(() {
+    //     fullSentence = savedFullSentenceMode;
+    //     if (kDebugMode) {
+    //       print("FULL SENTENCE MODE: $fullSentence");
+    //     }
+    //   });
+    // }
 
     // Load show original text preference - Default to true if not set
     final savedShowOriginalText = await StorageService.getShowOriginalText();
