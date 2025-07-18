@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 import 'package:audio_recorder/pages/main_page.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -7,9 +8,11 @@ import 'package:flutter_sound/flutter_sound.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:noise_meter/noise_meter.dart';
 import 'package:audio_waveforms/audio_waveforms.dart';
+import 'package:waveform_flutter/waveform_flutter.dart';
 import 'package:audio_recorder/models/cloning_sentences.dart';
 import 'package:audio_recorder/utils.dart';
 import '../services/voice_cloning_service.dart';
+import '../services/vad_service.dart';
 import 'package:path_provider/path_provider.dart';
 
 class VoiceCloningScreen extends StatefulWidget {
@@ -37,6 +40,21 @@ class VoiceCloningScreenState extends State<VoiceCloningScreen> {
 
   final RecorderController _recorderController = RecorderController();
 
+  // VAD Integration
+  final VadService _vadService = VadService.instance;
+  StreamSubscription<void>? _speechStartSubscription;
+  StreamSubscription<void>? _realSpeechStartSubscription;
+  StreamSubscription<List<double>>? _speechEndSubscription;
+  StreamSubscription<Map<String, dynamic>>? _frameProcessedSubscription;
+  StreamSubscription<void>? _vadMisfireSubscription;
+  StreamSubscription<String>? _vadErrorSubscription;
+
+  // Waveform data
+  final StreamController<Amplitude> _amplitudeController =
+      StreamController<Amplitude>.broadcast();
+  Stream<Amplitude> get amplitudeStream => _amplitudeController.stream;
+  bool _vadDetectedSpeech = false;
+
   String get _currentSentence =>
       _currentSentenceIndex < VoiceCloningSentences.sentences.length
           ? VoiceCloningSentences.sentences[_currentSentenceIndex]
@@ -47,6 +65,7 @@ class VoiceCloningScreenState extends State<VoiceCloningScreen> {
     super.initState();
     _initAudioFile(); // Add this line
     _checkAndRequestPermissions();
+    _initializeVAD();
   }
 
   Future<void> _initAudioFile() async {
@@ -95,6 +114,66 @@ class VoiceCloningScreenState extends State<VoiceCloningScreen> {
     }
   }
 
+  /// Initialize VAD service and set up event listeners
+  Future<void> _initializeVAD() async {
+    try {
+      final success = await _vadService.initialize(isDebug: kDebugMode);
+      if (success) {
+        _setupVADListeners();
+        debugPrint('VAD initialized successfully');
+      } else {
+        debugPrint('Failed to initialize VAD');
+      }
+    } catch (e) {
+      debugPrint('VAD initialization error: $e');
+    }
+  }
+
+  /// Set up VAD event listeners
+  void _setupVADListeners() {
+    _speechStartSubscription = _vadService.onSpeechStart.listen((_) {
+      setState(() {
+        _vadDetectedSpeech = true;
+        _feedback = "Speech Detected";
+      });
+    });
+
+    _realSpeechStartSubscription = _vadService.onRealSpeechStart.listen((_) {
+      setState(() {
+        _feedback = "Real Speech Detected";
+      });
+    });
+
+    _speechEndSubscription = _vadService.onSpeechEnd.listen((samples) {
+      setState(() {
+        _vadDetectedSpeech = false;
+        _feedback = "Speech Ended";
+      });
+    });
+
+    _frameProcessedSubscription =
+        _vadService.onFrameProcessed.listen((frameData) {
+      // Convert frame data to amplitude for waveform
+      final frame = frameData['frame'] as List<double>? ?? [];
+      if (frame.isNotEmpty) {
+        final amplitude =
+            frame.fold<double>(0.0, (sum, sample) => sum + sample.abs()) /
+                frame.length;
+        _amplitudeController.add(Amplitude(current: amplitude * 100, max: 100));
+      }
+    });
+
+    _vadMisfireSubscription = _vadService.onVadMisfire.listen((_) {
+      setState(() {
+        _feedback = "VAD Misfire";
+      });
+    });
+
+    _vadErrorSubscription = _vadService.onError.listen((error) {
+      _showErrorDialog('VAD Error: $error');
+    });
+  }
+
   void _nextSentence() {
     if (_currentSentenceIndex < VoiceCloningSentences.sentences.length - 1) {
       setState(() {
@@ -136,10 +215,17 @@ class VoiceCloningScreenState extends State<VoiceCloningScreen> {
 
       await _recorderController.record();
 
+      // Start VAD listening
+      if (_vadService.isInitialized) {
+        await _vadService.startListening();
+      }
+
       _noiseSubscription = _noiseMeter.noise.listen((NoiseReading reading) {
         setState(() {
           _decibel = reading.meanDecibel;
-          _feedback = _getFeedbackFromDecibel(_decibel);
+          if (!_vadDetectedSpeech) {
+            _feedback = _getFeedbackFromDecibel(_decibel);
+          }
         });
       });
 
@@ -166,8 +252,14 @@ class VoiceCloningScreenState extends State<VoiceCloningScreen> {
       await _recorderController.pause();
       _noiseSubscription?.cancel();
 
+      // Stop VAD listening
+      if (_vadService.isListening) {
+        await _vadService.stopListening();
+      }
+
       setState(() {
         _isRecording = false;
+        _vadDetectedSpeech = false;
       });
 
       if (_currentSentenceIndex >= VoiceCloningSentences.sentences.length - 1) {
@@ -289,6 +381,16 @@ class VoiceCloningScreenState extends State<VoiceCloningScreen> {
     _audioRecorder?.closeRecorder();
     _audioRecorder = null;
     _recorderController.dispose();
+
+    // Clean up VAD subscriptions
+    _speechStartSubscription?.cancel();
+    _realSpeechStartSubscription?.cancel();
+    _speechEndSubscription?.cancel();
+    _frameProcessedSubscription?.cancel();
+    _vadMisfireSubscription?.cancel();
+    _vadErrorSubscription?.cancel();
+    _amplitudeController.close();
+
     super.dispose();
   }
 
@@ -346,17 +448,32 @@ class VoiceCloningScreenState extends State<VoiceCloningScreen> {
               ),
               const SizedBox(height: 20),
               if (!_isComplete) ...[
-                Text(
-                  _feedback,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: _feedback == "Too Loud"
-                        ? Colors.red
-                        : _feedback == "Too Quiet"
-                            ? Colors.orange
-                            : Colors.green,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (_vadDetectedSpeech) ...[
+                      Icon(
+                        Icons.mic,
+                        color: Colors.green,
+                        size: 20,
+                      ),
+                      SizedBox(width: 8),
+                    ],
+                    Text(
+                      _feedback,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: _vadDetectedSpeech
+                            ? Colors.green
+                            : _feedback == "Too Loud"
+                                ? Colors.red
+                                : _feedback == "Too Quiet"
+                                    ? Colors.orange
+                                    : Colors.green,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 30),
                 SizedBox(
@@ -366,19 +483,25 @@ class VoiceCloningScreenState extends State<VoiceCloningScreen> {
                     borderRadius: BorderRadius.circular(10),
                     child: Container(
                       color: Colors.grey.shade400,
-                      child: AudioWaveforms(
-                        size:
-                            Size(MediaQuery.of(context).size.width * 0.8, 100),
-                        recorderController: _recorderController,
-                        enableGesture: true,
-                        waveStyle: WaveStyle(
-                          showMiddleLine: false,
-                          waveThickness: 1.0,
-                          extendWaveform: true,
-                          waveColor: Colors.blue,
-                          spacing: 2.0,
-                        ),
-                      ),
+                      child: _isRecording
+                          ? AnimatedWaveList(stream: amplitudeStream)
+                          : Container(
+                              width: MediaQuery.of(context).size.width * 0.8,
+                              height: 100,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade300,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  'Waveform will appear when recording',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade600,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                            ),
                     ),
                   ),
                 ),

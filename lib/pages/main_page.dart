@@ -2,6 +2,7 @@ import 'package:audio_recorder/models/language_model.dart';
 import 'package:audio_recorder/models/websocket_config.dart';
 import 'package:audio_recorder/pages/login_page.dart';
 import 'package:audio_recorder/services/storage_service.dart';
+import 'package:audio_recorder/services/vad_service.dart';
 import 'package:audio_recorder/utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -65,6 +66,19 @@ class TranslationAppState extends State<TranslationApp> {
 
   WebsocketService? _websocketService;
 
+  // VAD Integration
+  final VadService _vadService = VadService.instance;
+  StreamSubscription<void>? _speechStartSubscription;
+  StreamSubscription<void>? _realSpeechStartSubscription;
+  StreamSubscription<List<double>>? _speechEndSubscription;
+  StreamSubscription<Map<String, dynamic>>? _frameProcessedSubscription;
+  StreamSubscription<void>? _vadMisfireSubscription;
+  StreamSubscription<String>? _vadErrorSubscription;
+
+  bool _vadDetectedSpeech = false;
+  bool _vadInitialized = false;
+  final List<Uint8List> _pendingAudioChunks = [];
+
   bool isInitialized = false;
   bool _isLayoutInitialized = false;
 
@@ -90,6 +104,12 @@ class TranslationAppState extends State<TranslationApp> {
   // For handling timing of player updates
   DateTime? _lastPlayerChunk;
 
+  // Audio playback control variables
+  bool _isPlayingTranslation = false;
+  bool _hasTranslationToPlay = false;
+  List<Uint8List> _lastTranslationAudio = [];
+  String _lastTranslatedText = '';
+
   // Add variables for error handling
   String? _websocketErrorMessage;
   Timer? _errorDisplayTimer;
@@ -101,6 +121,7 @@ class TranslationAppState extends State<TranslationApp> {
   void initState() {
     super.initState();
     _initializeUser();
+    _initializeVAD();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         final screenHeight = MediaQuery.of(context).size.height;
@@ -209,11 +230,113 @@ class TranslationAppState extends State<TranslationApp> {
     }
   }
 
+  /// Initialize VAD service and set up event listeners
+  Future<void> _initializeVAD() async {
+    try {
+      final success = await _vadService.initialize(isDebug: kDebugMode);
+      if (success) {
+        _setupVADListeners();
+        setState(() {
+          _vadInitialized = true;
+        });
+        if (kDebugMode) {
+          print('VAD initialized successfully in main page');
+        }
+      } else {
+        if (kDebugMode) {
+          print('Failed to initialize VAD in main page');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('VAD initialization error in main page: $e');
+      }
+    }
+  }
+
+  /// Set up VAD event listeners
+  void _setupVADListeners() {
+    _speechStartSubscription = _vadService.onSpeechStart.listen((_) {
+      setState(() {
+        _vadDetectedSpeech = true;
+      });
+      if (kDebugMode) {
+        print('VAD: Speech detected - will start sending audio chunks');
+      }
+      // Send any pending chunks when speech is detected
+      _sendPendingChunks();
+    });
+
+    _realSpeechStartSubscription = _vadService.onRealSpeechStart.listen((_) {
+      if (kDebugMode) {
+        print('VAD: Real speech detected');
+      }
+    });
+
+    _speechEndSubscription = _vadService.onSpeechEnd.listen((samples) {
+      setState(() {
+        _vadDetectedSpeech = false;
+      });
+      if (kDebugMode) {
+        print('VAD: Speech ended - will stop sending audio chunks');
+      }
+      // Clear pending chunks when speech ends
+      _pendingAudioChunks.clear();
+    });
+
+    _frameProcessedSubscription =
+        _vadService.onFrameProcessed.listen((frameData) {
+      // We can use this for additional processing if needed
+    });
+
+    _vadMisfireSubscription = _vadService.onVadMisfire.listen((_) {
+      if (kDebugMode) {
+        print('VAD: Misfire detected');
+      }
+    });
+
+    _vadErrorSubscription = _vadService.onError.listen((error) {
+      if (kDebugMode) {
+        print('VAD Error: $error');
+      }
+      _showError('VAD Error: $error');
+    });
+  }
+
+  /// Send pending audio chunks when speech is detected
+  void _sendPendingChunks() {
+    if (_pendingAudioChunks.isNotEmpty &&
+        _websocketService != null &&
+        (_websocketService?.isWebSocketConnected ?? false)) {
+      String targetLanguage = isExpandedTop ? topLanguage : bottomLanguage;
+
+      for (final chunk in _pendingAudioChunks) {
+        _websocketService?.sendData(
+            _sampleRate, userID ?? 'ronaldo', targetLanguage, chunk);
+      }
+
+      if (kDebugMode) {
+        print('Sent ${_pendingAudioChunks.length} pending audio chunks');
+      }
+
+      _pendingAudioChunks.clear();
+    }
+  }
+
   @override
   void dispose() {
     destroyAudioEngine();
     _websocketService?.dispose(); // Dispose the WebSocket service properly
     _errorDisplayTimer?.cancel();
+
+    // Clean up VAD subscriptions
+    _speechStartSubscription?.cancel();
+    _realSpeechStartSubscription?.cancel();
+    _speechEndSubscription?.cancel();
+    _frameProcessedSubscription?.cancel();
+    _vadMisfireSubscription?.cancel();
+    _vadErrorSubscription?.cancel();
+
     super.dispose();
   }
 
@@ -407,6 +530,14 @@ class TranslationAppState extends State<TranslationApp> {
       }
     }
 
+    // Start VAD listening if initialized
+    if (_vadInitialized && _vadService.isInitialized) {
+      await _vadService.startListening();
+      if (kDebugMode) {
+        print('VAD listening started');
+      }
+    }
+
     // Connection successful, now start listening
     setState(() {
       isConnecting = false;
@@ -434,6 +565,7 @@ class TranslationAppState extends State<TranslationApp> {
     setState(() {
       if (fullSentence) {
         translatedText = text; // Replace with full sentence
+        _lastTranslatedText = text; // Store for repeat functionality
 
         // Set spoken text when available
         if (spoken != null && spoken.isNotEmpty) {
@@ -446,6 +578,7 @@ class TranslationAppState extends State<TranslationApp> {
         }
       } else {
         translatedText += '$text '; // Append text as before
+        _lastTranslatedText = translatedText; // Store for repeat functionality
 
         // Also append spoken text if available
         if (spoken != null && spoken.isNotEmpty) {
@@ -458,6 +591,63 @@ class TranslationAppState extends State<TranslationApp> {
         }
       }
     });
+  }
+
+  // Method to play translation audio
+  void _playTranslationAudio() {
+    if (_hasTranslationToPlay &&
+        _lastTranslationAudio.isNotEmpty &&
+        !_isPlayingTranslation) {
+      setState(() {
+        _isPlayingTranslation = true;
+      });
+
+      // Play all stored audio chunks
+      for (final audioChunk in _lastTranslationAudio) {
+        audioEngine?.queueChunk(audioChunk);
+      }
+
+      // Set a timer to reset the playing state after audio finishes
+      // Estimate duration based on audio data length (rough calculation)
+      final estimatedDuration = Duration(
+          milliseconds:
+              (_lastTranslationAudio.length * 100).clamp(1000, 10000));
+
+      Timer(estimatedDuration, () {
+        if (mounted) {
+          setState(() {
+            _isPlayingTranslation = false;
+          });
+        }
+      });
+    }
+  }
+
+  // Method to handle incoming translation audio
+  void _handleTranslationAudio(Uint8List audioData) {
+    if (!_isPlayingTranslation) {
+      // Only play automatically if not already playing
+      setState(() {
+        _isPlayingTranslation = true;
+        _hasTranslationToPlay = true;
+        _lastTranslationAudio = [audioData]; // Store the audio for repeat
+      });
+
+      // Play the audio
+      audioEngine?.queueChunk(audioData);
+
+      // Set a timer to reset the playing state
+      Timer(const Duration(milliseconds: 2000), () {
+        if (mounted) {
+          setState(() {
+            _isPlayingTranslation = false;
+          });
+        }
+      });
+    } else {
+      // If already playing, just store the audio for potential repeat
+      _lastTranslationAudio.add(audioData);
+    }
   }
 
   void _resetTexts() {
@@ -475,11 +665,23 @@ class TranslationAppState extends State<TranslationApp> {
     isExpandedTop = false;
     isExpandedBottom = false;
 
+    // Stop VAD listening
+    if (_vadInitialized && _vadService.isListening) {
+      _vadService.stopListening();
+      if (kDebugMode) {
+        print('VAD listening stopped');
+      }
+    }
+
     // Reset connection states
     setState(() {
       isConnecting = false;
       isListening = false;
+      _vadDetectedSpeech = false;
     });
+
+    // Clear pending chunks
+    _pendingAudioChunks.clear();
 
     _resetTexts();
     if (isRecording) {
@@ -549,22 +751,53 @@ class TranslationAppState extends State<TranslationApp> {
           SingleChildScrollView(
             child: Container(
               padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              child: Column(
                 children: [
-                  SpinKitPulse(
-                    color: Colors.black,
-                    size: 20.0,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SpinKitPulse(
+                        color: Colors.black,
+                        size: 20.0,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        isConnecting ? 'Connecting...' : 'I am listening...',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  Text(
-                    isConnecting ? 'Connecting...' : 'I am listening...',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.black,
+                  // VAD Status Indicator
+                  if (isListening && _vadInitialized) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          _vadDetectedSpeech ? Icons.mic : Icons.mic_off,
+                          color:
+                              _vadDetectedSpeech ? Colors.green : Colors.grey,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _vadDetectedSpeech
+                              ? 'Speech detected'
+                              : 'Waiting for speech...',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color:
+                                _vadDetectedSpeech ? Colors.green : Colors.grey,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
@@ -650,6 +883,42 @@ class TranslationAppState extends State<TranslationApp> {
             ),
           ),
         ),
+        // Repeat button section for top display
+        if (_hasTranslationToPlay && _lastTranslatedText.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: ElevatedButton.icon(
+                    onPressed:
+                        _isPlayingTranslation ? null : _playTranslationAudio,
+                    icon: Icon(
+                      _isPlayingTranslation ? Icons.volume_up : Icons.replay,
+                      size: 18,
+                    ),
+                    label: Text(
+                      _isPlayingTranslation ? 'Playing...' : 'Repeat',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.black.withValues(alpha: 0.1),
+                      foregroundColor: Colors.black,
+                      elevation: 1,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         Expanded(
           flex: 1,
           child: Column(
@@ -696,22 +965,53 @@ class TranslationAppState extends State<TranslationApp> {
           SingleChildScrollView(
             child: Container(
               padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              child: Column(
                 children: [
-                  SpinKitPulse(
-                    color: Colors.black,
-                    size: 20.0,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SpinKitPulse(
+                        color: Colors.black,
+                        size: 20.0,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        isConnecting ? 'Connecting...' : 'I am listening...',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  Text(
-                    isConnecting ? 'Connecting...' : 'I am listening...',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.black,
+                  // VAD Status Indicator
+                  if (isListening && _vadInitialized) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          _vadDetectedSpeech ? Icons.mic : Icons.mic_off,
+                          color:
+                              _vadDetectedSpeech ? Colors.green : Colors.grey,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _vadDetectedSpeech
+                              ? 'Speech detected'
+                              : 'Waiting for speech...',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color:
+                                _vadDetectedSpeech ? Colors.green : Colors.grey,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
@@ -799,6 +1099,42 @@ class TranslationAppState extends State<TranslationApp> {
             ),
           ),
         ),
+        // Repeat button section for bottom display
+        if (_hasTranslationToPlay && _lastTranslatedText.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: ElevatedButton.icon(
+                    onPressed:
+                        _isPlayingTranslation ? null : _playTranslationAudio,
+                    icon: Icon(
+                      _isPlayingTranslation ? Icons.volume_up : Icons.replay,
+                      size: 18,
+                    ),
+                    label: Text(
+                      _isPlayingTranslation ? 'Playing...' : 'Repeat',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.black.withValues(alpha: 0.1),
+                      foregroundColor: Colors.black,
+                      elevation: 1,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         const Spacer(),
       ],
     );
@@ -1099,47 +1435,77 @@ class TranslationAppState extends State<TranslationApp> {
 
   void _handleRecorderChunk(Uint8List chunk) {
     if (_previewData == null) return;
-    if (kDebugMode) {
-      print('Sending chunk to server');
+
+    // Save language preference each time we record in that language
+    // and ensure currentLanguage is up to date
+    if (isExpandedTop) {
+      if (kDebugMode) {
+        print("RECORDING WITH TOP LANGUAGE: $topLanguage");
+      }
+      StorageService.saveTopLanguagePreference(topLanguage);
+
+      // Update current language if needed
+      if (currentLanguage.code != topLanguage &&
+          Languages.languages.containsKey(topLanguage)) {
+        currentLanguage = Languages.languages[topLanguage]!;
+        if (kDebugMode) {
+          print("UPDATED CURRENT LANGUAGE TO: ${currentLanguage.name}");
+        }
+      }
+    } else {
+      if (kDebugMode) {
+        print("RECORDING WITH BOTTOM LANGUAGE: $bottomLanguage");
+      }
+      StorageService.saveBottomLanguagePreference(bottomLanguage);
+
+      // Update current language if needed
+      if (currentLanguage.code != bottomLanguage &&
+          Languages.languages.containsKey(bottomLanguage)) {
+        currentLanguage = Languages.languages[bottomLanguage]!;
+        if (kDebugMode) {
+          print("UPDATED CURRENT LANGUAGE TO: ${currentLanguage.name}");
+        }
+      }
     }
-    if (_websocketService != null &&
+
+    // VAD-based chunk handling
+    if (_vadInitialized &&
+        _websocketService != null &&
         (_websocketService?.isWebSocketConnected ?? false)) {
       String targetLanguage = isExpandedTop ? topLanguage : bottomLanguage;
 
-      // Save language preference each time we record in that language
-      // and ensure currentLanguage is up to date
-      if (isExpandedTop) {
+      if (_vadDetectedSpeech) {
+        // Speech is detected, send the chunk immediately
         if (kDebugMode) {
-          print("RECORDING WITH TOP LANGUAGE: $topLanguage");
+          print('VAD: Sending chunk to server (speech detected)');
         }
-        StorageService.saveTopLanguagePreference(topLanguage);
-
-        // Update current language if needed
-        if (currentLanguage.code != topLanguage &&
-            Languages.languages.containsKey(topLanguage)) {
-          currentLanguage = Languages.languages[topLanguage]!;
-          if (kDebugMode) {
-            print("UPDATED CURRENT LANGUAGE TO: ${currentLanguage.name}");
-          }
-        }
+        _websocketService?.sendData(
+            _sampleRate, userID ?? 'ronaldo', targetLanguage, chunk);
       } else {
-        if (kDebugMode) {
-          print("RECORDING WITH BOTTOM LANGUAGE: $bottomLanguage");
-        }
-        StorageService.saveBottomLanguagePreference(bottomLanguage);
+        // No speech detected, buffer the chunk for potential later sending
+        _pendingAudioChunks.add(chunk);
 
-        // Update current language if needed
-        if (currentLanguage.code != bottomLanguage &&
-            Languages.languages.containsKey(bottomLanguage)) {
-          currentLanguage = Languages.languages[bottomLanguage]!;
-          if (kDebugMode) {
-            print("UPDATED CURRENT LANGUAGE TO: ${currentLanguage.name}");
-          }
+        // Keep only the last few chunks to avoid memory issues
+        if (_pendingAudioChunks.length > 10) {
+          _pendingAudioChunks.removeAt(0);
+        }
+
+        if (kDebugMode) {
+          print(
+              'VAD: Buffering chunk (no speech detected), buffer size: ${_pendingAudioChunks.length}');
         }
       }
-
-      _websocketService?.sendData(
-          _sampleRate, userID ?? 'ronaldo', targetLanguage, chunk);
+    } else if (!_vadInitialized) {
+      // Fallback: if VAD is not initialized, send all chunks (original behavior)
+      if (kDebugMode) {
+        print('VAD not initialized, sending chunk to server (fallback)');
+      }
+      if (_websocketService != null &&
+          (_websocketService?.isWebSocketConnected ?? false)) {
+        String targetLanguage = isExpandedTop ? topLanguage : bottomLanguage;
+        _websocketService?.sendData(
+            _sampleRate, userID ?? 'ronaldo', targetLanguage, chunk);
+      }
     }
   }
 
@@ -1668,7 +2034,7 @@ Message: ${technicalError.message}
           _processText(message, spokenText, originalText);
         }, (audioData) {
           _previewData?.add(audioData);
-          audioEngine?.queueChunk(audioData);
+          _handleTranslationAudio(audioData); // Use controlled audio handling
         });
       });
       return true;
