@@ -197,10 +197,12 @@ class VoiceCloningScreenState extends State<VoiceCloningScreen> {
 
   void _showErrorDialog(String message,
       {ErrorSeverity severity = ErrorSeverity.medium,
-      String source = 'VoiceCloning'}) {
-    _errorLogger.logError(message, severity: severity, source: source);
+      String source = 'VoiceCloning',
+      dynamic error}) {
+    _errorLogger.logError(message,
+        severity: severity, source: source, error: error);
 
-    ErrorLogger.showError(context, message);
+    ErrorLogger.showError(context, message, technicalError: error);
   }
 
   Future<void> _submitVoiceCloning() async {
@@ -232,7 +234,8 @@ class VoiceCloningScreenState extends State<VoiceCloningScreen> {
       _errorLogger.logError('Voice cloning submission failed',
           severity: ErrorSeverity.high, source: 'VoiceCloning', error: e);
 
-      _showRetryDialog('Voice cloning failed. Would you like to try again?');
+      _showRetryDialog('Voice cloning failed. Would you like to try again?',
+          error: e);
     }
   }
 
@@ -252,14 +255,15 @@ class VoiceCloningScreenState extends State<VoiceCloningScreen> {
     );
   }
 
-  void _showRetryDialog(String message) {
+  void _showRetryDialog(String message, {dynamic error}) {
     _errorLogger.logError(message,
-        severity: ErrorSeverity.high, source: 'VoiceCloning');
+        severity: ErrorSeverity.high, source: 'VoiceCloning', error: error);
 
     ErrorLogger.showErrorDialog(
       context,
       'Voice Cloning Error',
       message,
+      technicalError: error,
       onRetry: () {
         setState(() {
           _currentSentenceIndex = 0;

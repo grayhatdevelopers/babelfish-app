@@ -88,6 +88,7 @@ class TranslationAppState extends State<TranslationApp> {
   Timer? _errorDisplayTimer;
   bool _showErrorOverlay = false;
   final ErrorLogger _errorLogger = ErrorLogger();
+  dynamic _technicalErrorDetails;
 
   @override
   void initState() {
@@ -297,6 +298,13 @@ class TranslationAppState extends State<TranslationApp> {
                     _showErrorOverlay = false;
                   });
                 },
+                technicalError: _technicalErrorDetails,
+                onShowDetails: _technicalErrorDetails != null
+                    ? () {
+                        ErrorLogger.showTechnicalErrorDialog(
+                            context, _technicalErrorDetails);
+                      }
+                    : null,
               ),
             ),
         ],
@@ -354,7 +362,7 @@ class TranslationAppState extends State<TranslationApp> {
   }
 
   void _processText(String text, String? original) {
-    translatedSentences.add(text);
+    // translatedSentences.add(text);
 
     // Only log in debug mode
     if (kDebugMode && original != null) {
@@ -1005,13 +1013,16 @@ class TranslationAppState extends State<TranslationApp> {
   void _showError(String errorMessage,
       {Duration duration = const Duration(seconds: 5),
       ErrorSeverity severity = ErrorSeverity.medium,
-      String source = 'WebSocket'}) {
+      String source = 'WebSocket',
+      dynamic error}) {
     // Log the error through our centralized error logger
-    _errorLogger.logError(errorMessage, severity: severity, source: source);
+    _errorLogger.logError(errorMessage,
+        severity: severity, source: source, error: error);
 
     setState(() {
       _websocketErrorMessage = errorMessage;
       _showErrorOverlay = true;
+      _technicalErrorDetails = error;
     });
 
     // Auto-hide the error after duration
@@ -1070,6 +1081,7 @@ class TranslationAppState extends State<TranslationApp> {
         userFriendlyMessage,
         severity: severity,
         source: 'WebSocket',
+        error: error,
       );
     });
 

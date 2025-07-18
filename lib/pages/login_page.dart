@@ -332,7 +332,8 @@ class _LoginScreenState extends State<LoginScreen> {
           severity: ErrorSeverity.high, source: 'Authentication', error: e);
 
       if (mounted) {
-        ErrorLogger.showError(context, 'Authentication error: ${e.message}');
+        ErrorLogger.showError(context, 'Authentication error: ${e.message}',
+            technicalError: e);
       }
     } catch (e) {
       _errorLogger.logError('Unexpected authentication error',
@@ -340,7 +341,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (mounted) {
         ErrorLogger.showError(context,
-            'Unexpected error during authentication. Please try again.');
+            'Unexpected error during authentication. Please try again.',
+            technicalError: e);
       }
     } finally {
       if (mounted) {
