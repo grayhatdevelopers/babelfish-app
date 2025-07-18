@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 class ResponseHandler {
   static handleReponse(
       dynamic message,
-      Function(String, String?) onTextReceived,
+      Function(String, String?, String?) onTextReceived,
       Function(Uint8List) onAudioReceived) {
     if (message is String) {
       // Handle JSON messages
@@ -14,14 +14,17 @@ class ResponseHandler {
         // Handle translated text
         if (kDebugMode) {
           print("Translation: ${response['text']}");
+          if (response['spoken_text'] != null) {
+            print("Spoken text: ${response['spoken_text']}");
+          }
         }
-        onTextReceived(response['text'], null);
+        onTextReceived(response['text'], response['spoken_text'], null);
       } else if (response['type'] == 'fullSentence') {
         // Handle original transcribed text
         if (kDebugMode) {
           print("Original text: ${response['text']}");
         }
-        onTextReceived(response['text'], response['text']);
+        onTextReceived(response['text'], null, response['text']);
       } else if (response['type'] == 'audio') {
         Float32List preprocessedAudioData =
             Float32List.fromList(response['audio_data']);

@@ -6,6 +6,7 @@ import 'package:audio_recorder/utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_sfsymbols/flutter_sfsymbols.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
 
 import 'dart:async';
 import 'dart:typed_data';
@@ -36,6 +37,10 @@ class TranslationAppState extends State<TranslationApp> {
   double heightTop = 100;
   double heightBottom = 100;
 
+  // Connection state variables
+  bool isConnecting = false;
+  bool isListening = false;
+
   // Add fullSentence feature
   bool fullSentence = true;
   List<String> translatedSentences = [];
@@ -43,7 +48,9 @@ class TranslationAppState extends State<TranslationApp> {
 
   // Add original transcript tracking
   String originalText = '';
+  String spokenText = ''; // Add spoken language text variable
   bool showOriginalText = true; // Toggle to show/hide original text
+  bool showSpokenText = true; // Toggle to show/hide spoken language text
 
   String serverUrl = WebSocketConfig.serverUrl;
   String? userID = 'ronaldo'; // Changed to nullable
@@ -170,6 +177,17 @@ class TranslationAppState extends State<TranslationApp> {
       });
     }
 
+    // Load show spoken text preference - Default to true if not set
+    final savedShowSpokenText = await StorageService.getShowSpokenText();
+    if (mounted) {
+      setState(() {
+        showSpokenText = savedShowSpokenText;
+        if (kDebugMode) {
+          print("SHOW SPOKEN TEXT: $showSpokenText");
+        }
+      });
+    }
+
     // Ensure the language preferences are saved
     await StorageService.saveBottomLanguagePreference(bottomLanguage);
     await StorageService.saveTopLanguagePreference(topLanguage);
@@ -180,6 +198,14 @@ class TranslationAppState extends State<TranslationApp> {
         showOriginalText = true;
       });
       await StorageService.saveShowOriginalText(true);
+    }
+
+    // Ensure the spoken text display is enabled by default
+    if (showSpokenText == false) {
+      setState(() {
+        showSpokenText = true;
+      });
+      await StorageService.saveShowSpokenText(true);
     }
   }
 
@@ -285,13 +311,13 @@ class TranslationAppState extends State<TranslationApp> {
             ),
           ),
 
-          // Error overlay
+          // Enhanced Error overlay
           if (_showErrorOverlay && _websocketErrorMessage != null)
             Positioned(
-              top: 50,
-              left: 20,
-              right: 20,
-              child: ErrorLogger.errorOverlay(
+              top: 60,
+              left: 0,
+              right: 0,
+              child: enhancedErrorOverlay(
                 errorMessage: _websocketErrorMessage!,
                 onDismiss: () {
                   setState(() {
@@ -301,7 +327,7 @@ class TranslationAppState extends State<TranslationApp> {
                 technicalError: _technicalErrorDetails,
                 onShowDetails: _technicalErrorDetails != null
                     ? () {
-                        ErrorLogger.showTechnicalErrorDialog(
+                        showEnhancedTechnicalErrorDialog(
                             context, _technicalErrorDetails);
                       }
                     : null,
@@ -354,19 +380,54 @@ class TranslationAppState extends State<TranslationApp> {
         }
       }
 
-      if (isRecording) {
-        _toggleRecording();
+      // Start connecting when section is expanded
+      if (isExpandedTop || isExpandedBottom) {
+        _startConnectionProcess();
       }
-      _toggleRecording();
     });
   }
 
-  void _processText(String text, String? original) {
-    // translatedSentences.add(text);
+  void _startConnectionProcess() async {
+    setState(() {
+      isConnecting = true;
+      isListening = false;
+    });
 
+    // Initialize audio engine and connect WebSocket
+    if (!isInitialized) {
+      await createAudioEngine(recorderEnabled: true);
+    }
+    if (!isWebSocketConnected) {
+      final connected = await _connectWebSocket();
+      if (!connected) {
+        setState(() {
+          isConnecting = false;
+        });
+        return;
+      }
+    }
+
+    // Connection successful, now start listening
+    setState(() {
+      isConnecting = false;
+      isListening = true;
+    });
+
+    // Start recording
+    if (!isRecording) {
+      _toggleRecording();
+    }
+  }
+
+  void _processText(String text, String? spoken, String? original) {
     // Only log in debug mode
-    if (kDebugMode && original != null) {
-      print('Original text: $original');
+    if (kDebugMode) {
+      if (original != null) {
+        print('Original text: $original');
+      }
+      if (spoken != null) {
+        print('Spoken language text: $spoken');
+      }
       print('Translated text: $text');
     }
 
@@ -374,12 +435,22 @@ class TranslationAppState extends State<TranslationApp> {
       if (fullSentence) {
         translatedText = text; // Replace with full sentence
 
+        // Set spoken text when available
+        if (spoken != null && spoken.isNotEmpty) {
+          spokenText = spoken;
+        }
+
         // Set original text when available
         if (original != null && original.isNotEmpty) {
           originalText = original;
         }
       } else {
         translatedText += '$text '; // Append text as before
+
+        // Also append spoken text if available
+        if (spoken != null && spoken.isNotEmpty) {
+          spokenText += '$spoken ';
+        }
 
         // Also append original text if available
         if (original != null && original.isNotEmpty) {
@@ -393,6 +464,7 @@ class TranslationAppState extends State<TranslationApp> {
     setState(() {
       translatedText = '';
       originalText = '';
+      spokenText = '';
       translatedSentences = [];
     });
   }
@@ -402,6 +474,13 @@ class TranslationAppState extends State<TranslationApp> {
     heightTop = MediaQuery.of(context).size.height * 0.5;
     isExpandedTop = false;
     isExpandedBottom = false;
+
+    // Reset connection states
+    setState(() {
+      isConnecting = false;
+      isListening = false;
+    });
+
     _resetTexts();
     if (isRecording) {
       _toggleRecording();
@@ -463,7 +542,36 @@ class TranslationAppState extends State<TranslationApp> {
   Widget _textDisplayTop() {
     return Column(
       children: [
-        const SizedBox(height: 80), // Add space at the top for better centering
+        const SizedBox(height: 80),
+
+        // Connection/Listening Status
+        if (isConnecting || isListening) ...[
+          SingleChildScrollView(
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SpinKitPulse(
+                    color: Colors.black,
+                    size: 20.0,
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    isConnecting ? 'Connecting...' : 'I am listening...',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
+
         // Translated text with bold styling centered in the top half
         Expanded(
           flex: 3,
@@ -484,6 +592,32 @@ class TranslationAppState extends State<TranslationApp> {
                     textAlign: TextAlign.center,
                   ),
                 ),
+                // Spoken language text with medium opacity
+                if (showSpokenText && spokenText.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  AnimatedSwitcher(
+                    duration: textAnimationDuration,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16.0, vertical: 8.0),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.02),
+                        borderRadius: BorderRadius.circular(8.0),
+                      ),
+                      child: Text(
+                        "Spoken: \"$spokenText\"",
+                        key: ValueKey<String>(spokenText),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w400,
+                          color: Colors.black.withValues(alpha: 0.6),
+                          letterSpacing: 0.2,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                ],
                 // Original text underneath with less opacity
                 if (showOriginalText && originalText.isNotEmpty) ...[
                   const SizedBox(height: 16),
@@ -555,6 +689,35 @@ class TranslationAppState extends State<TranslationApp> {
           style: TextStyle(
               fontSize: 14, fontWeight: FontWeight.w300, color: Colors.black),
         ),
+
+        // Connection/Listening Status
+        if (isConnecting || isListening) ...[
+          const SizedBox(height: 20),
+          SingleChildScrollView(
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SpinKitPulse(
+                    color: Colors.black,
+                    size: 20.0,
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    isConnecting ? 'Connecting...' : 'I am listening...',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+
         // Main content area with both translated and original text
         Expanded(
           flex: 3,
@@ -577,6 +740,32 @@ class TranslationAppState extends State<TranslationApp> {
                       textAlign: TextAlign.center,
                     ),
                   ),
+                  // Spoken language text with medium opacity
+                  if (showSpokenText && spokenText.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    AnimatedSwitcher(
+                      duration: textAnimationDuration,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16.0, vertical: 8.0),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.02),
+                          borderRadius: BorderRadius.circular(8.0),
+                        ),
+                        child: Text(
+                          "Spoken: \"$spokenText\"",
+                          key: ValueKey<String>(spokenText),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w400,
+                            color: Colors.black.withValues(alpha: 0.6),
+                            letterSpacing: 0.2,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                  ],
                   // Original text underneath with less opacity
                   if (showOriginalText && originalText.isNotEmpty) ...[
                     const SizedBox(height: 16),
@@ -678,7 +867,7 @@ class TranslationAppState extends State<TranslationApp> {
     );
   }
 
-  // Fixed version of _showLanguageSelector method
+// Fixed version of _showLanguageSelector method with debug logs shown on screen
   void _showLanguageSelector(bool isTop) {
     showModalBottomSheet(
       context: context,
@@ -758,6 +947,21 @@ class TranslationAppState extends State<TranslationApp> {
                             print(
                                 "SAVING TOP LANGUAGE PREFERENCE: $langCode (was: $oldLanguage)");
                           }
+
+                          // Show debug log on screen
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Saving top language preference: $langCode (was: $oldLanguage)',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                                duration: Duration(seconds: 2),
+                                backgroundColor: Colors.blue.withOpacity(0.8),
+                              ),
+                            );
+                          }
+
                           await StorageService.saveTopLanguagePreference(
                               langCode);
 
@@ -768,6 +972,20 @@ class TranslationAppState extends State<TranslationApp> {
                             print("VERIFIED SAVED TOP LANGUAGE: $savedTopLang");
                           }
 
+                          // Show verification log on screen
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Verified saved top language: $savedTopLang',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                                duration: Duration(seconds: 2),
+                                backgroundColor: Colors.green.withOpacity(0.8),
+                              ),
+                            );
+                          }
+
                           // Update current language if top section is active
                           if (isExpandedTop &&
                               Languages.languages.containsKey(langCode)) {
@@ -775,6 +993,21 @@ class TranslationAppState extends State<TranslationApp> {
                             if (kDebugMode) {
                               print(
                                   "UPDATED CURRENT LANGUAGE TO: ${currentLanguage.name} (TOP ACTIVE)");
+                            }
+
+                            // Show current language update log on screen
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Updated current language to: ${currentLanguage.name} (TOP ACTIVE)',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
+                                  duration: Duration(seconds: 2),
+                                  backgroundColor:
+                                      Colors.purple.withOpacity(0.8),
+                                ),
+                              );
                             }
                           }
                         } else {
@@ -787,6 +1020,21 @@ class TranslationAppState extends State<TranslationApp> {
                             print(
                                 "SAVING BOTTOM LANGUAGE PREFERENCE: $langCode (was: $oldLanguage)");
                           }
+
+                          // Show debug log on screen
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Saving bottom language preference: $langCode (was: $oldLanguage)',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                                duration: Duration(seconds: 2),
+                                backgroundColor: Colors.blue.withOpacity(0.8),
+                              ),
+                            );
+                          }
+
                           await StorageService.saveBottomLanguagePreference(
                               langCode);
 
@@ -797,6 +1045,20 @@ class TranslationAppState extends State<TranslationApp> {
                             print("VERIFIED SAVED LANGUAGE: $savedLang");
                           }
 
+                          // Show verification log on screen
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Verified saved bottom language: $savedLang',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                                duration: Duration(seconds: 2),
+                                backgroundColor: Colors.green.withOpacity(0.8),
+                              ),
+                            );
+                          }
+
                           // Update current language if bottom section is active
                           if (isExpandedBottom &&
                               Languages.languages.containsKey(langCode)) {
@@ -804,6 +1066,21 @@ class TranslationAppState extends State<TranslationApp> {
                             if (kDebugMode) {
                               print(
                                   "UPDATED CURRENT LANGUAGE TO: ${currentLanguage.name} (BOTTOM ACTIVE)");
+                            }
+
+                            // Show current language update log on screen
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Updated current language to: ${currentLanguage.name} (BOTTOM ACTIVE)',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
+                                  duration: Duration(seconds: 2),
+                                  backgroundColor:
+                                      Colors.purple.withOpacity(0.8),
+                                ),
+                              );
                             }
                           }
                         }
@@ -1010,6 +1287,296 @@ class TranslationAppState extends State<TranslationApp> {
     }
   }
 
+  // Enhanced error overlay widget with better styling
+  Widget enhancedErrorOverlay({
+    required String errorMessage,
+    required VoidCallback onDismiss,
+    dynamic technicalError,
+    VoidCallback? onShowDetails,
+  }) {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.shade200, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header with error icon and title
+          Row(
+            children: [
+              Icon(
+                Icons.error_outline,
+                color: Colors.red.shade600,
+                size: 24,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Connection Error',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red.shade800,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: Icon(Icons.close, color: Colors.red.shade600),
+                onPressed: onDismiss,
+                splashRadius: 20,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Error message
+          Text(
+            errorMessage,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.red.shade700,
+              height: 1.4,
+            ),
+          ),
+
+          // Technical details button if available
+          if (technicalError != null && onShowDetails != null) ...[
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: onShowDetails,
+                  icon: Icon(
+                    Icons.info_outline,
+                    size: 16,
+                    color: Colors.red.shade600,
+                  ),
+                  label: Text(
+                    'Technical Details',
+                    style: TextStyle(
+                      color: Colors.red.shade600,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  style: TextButton.styleFrom(
+                    backgroundColor: Colors.red.shade50,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      side: BorderSide(color: Colors.red.shade200),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // Enhanced technical error dialog
+  void showEnhancedTechnicalErrorDialog(
+      BuildContext context, dynamic technicalError) {
+    String errorDetails = '';
+    String errorType = 'Unknown Error';
+
+    if (technicalError is WebSocketError) {
+      errorType = technicalError.type.toString().split('.').last;
+      errorDetails = '''
+Error Type: ${technicalError.type.toString().split('.').last}
+Message: ${technicalError.message}
+''';
+    } else if (technicalError is Exception) {
+      errorType = technicalError.runtimeType.toString();
+      errorDetails = technicalError.toString();
+    } else {
+      errorDetails = technicalError.toString();
+    }
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.7,
+              maxWidth: MediaQuery.of(context).size.width * 0.9,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(16),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.bug_report,
+                        color: Colors.red.shade600,
+                        size: 28,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Technical Error Details',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.red.shade800,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              errorType,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.red.shade600,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Content
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.code,
+                                color: Colors.grey.shade600,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Error Information',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          SelectableText(
+                            errorDetails,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontFamily: 'monospace',
+                              color: Colors.grey.shade800,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Actions
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: const BorderRadius.only(
+                      bottomLeft: Radius.circular(16),
+                      bottomRight: Radius.circular(16),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton.icon(
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: errorDetails));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: const Text(
+                                  'Error details copied to clipboard'),
+                              backgroundColor: Colors.green.shade600,
+                              duration: const Duration(seconds: 2),
+                            ),
+                          );
+                        },
+                        icon: Icon(
+                          Icons.copy,
+                          size: 16,
+                          color: Colors.grey.shade600,
+                        ),
+                        label: Text(
+                          'Copy',
+                          style: TextStyle(color: Colors.grey.shade600),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red.shade600,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 24, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('Close'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _showError(String errorMessage,
       {Duration duration = const Duration(seconds: 5),
       ErrorSeverity severity = ErrorSeverity.medium,
@@ -1093,11 +1660,12 @@ class TranslationAppState extends State<TranslationApp> {
       _websocketService?.sendMessage(userID ?? 'ronaldo');
 
       _websocketService?.startListening((message) {
-        ResponseHandler.handleReponse(message, (message, originalText) {
+        ResponseHandler.handleReponse(message,
+            (message, spokenText, originalText) {
           if (kDebugMode) {
             print('Message from Server: $message');
           }
-          _processText(message, originalText);
+          _processText(message, spokenText, originalText);
         }, (audioData) {
           _previewData?.add(audioData);
           audioEngine?.queueChunk(audioData);
@@ -1230,6 +1798,32 @@ class TranslationAppState extends State<TranslationApp> {
                     content: Text(value
                         ? 'Original text display enabled'
                         : 'Original text display disabled'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              },
+            ),
+            SwitchListTile(
+              title: Text("Show Spoken Language Text"),
+              subtitle: Text("Display text in the spoken language"),
+              value: showSpokenText,
+              onChanged: (value) async {
+                setState(() {
+                  showSpokenText = value;
+                });
+
+                // Save the preference
+                await StorageService.saveShowSpokenText(value);
+                if (kDebugMode) {
+                  print("SAVED SHOW SPOKEN TEXT: $value");
+                }
+
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(value
+                        ? 'Spoken language text display enabled'
+                        : 'Spoken language text display disabled'),
                     duration: Duration(seconds: 2),
                   ),
                 );

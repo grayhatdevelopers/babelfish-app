@@ -19,6 +19,7 @@ class StorageService {
   // Constants for app settings
   static const _fullSentenceModeKey = 'full_sentence_mode';
   static const _showOriginalTextKey = 'show_original_text';
+  static const _showSpokenTextKey = 'show_spoken_text';
 
   static Future<void> saveToken(
     String username,
@@ -126,6 +127,15 @@ class StorageService {
 
   static Future<bool> getShowOriginalText() async {
     final value = await _storage.read(key: _showOriginalTextKey);
+    return value != 'false'; // Default to true if not set
+  }
+
+  static Future<void> saveShowSpokenText(bool enabled) async {
+    await _storage.write(key: _showSpokenTextKey, value: enabled.toString());
+  }
+
+  static Future<bool> getShowSpokenText() async {
+    final value = await _storage.read(key: _showSpokenTextKey);
     return value != 'false'; // Default to true if not set
   }
 }
