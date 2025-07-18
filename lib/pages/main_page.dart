@@ -595,16 +595,27 @@ class TranslationAppState extends State<TranslationApp> {
 
   // Method to play translation audio
   void _playTranslationAudio() {
+    if (kDebugMode) {
+      print(
+          'Repeat button pressed - hasTranslation: $_hasTranslationToPlay, audioChunks: ${_lastTranslationAudio.length}, isPlaying: $_isPlayingTranslation, audioEngine: ${audioEngine != null ? "initialized" : "null"}');
+    }
+
     if (_hasTranslationToPlay &&
         _lastTranslationAudio.isNotEmpty &&
-        !_isPlayingTranslation) {
+        !_isPlayingTranslation &&
+        audioEngine != null) {
       setState(() {
         _isPlayingTranslation = true;
       });
 
+      if (kDebugMode) {
+        print(
+            'Playing ${_lastTranslationAudio.length} audio chunks for repeat');
+      }
+
       // Play all stored audio chunks
       for (final audioChunk in _lastTranslationAudio) {
-        audioEngine?.queueChunk(audioChunk);
+        audioEngine!.queueChunk(audioChunk);
       }
 
       // Set a timer to reset the playing state after audio finishes
@@ -620,11 +631,28 @@ class TranslationAppState extends State<TranslationApp> {
           });
         }
       });
+    } else {
+      if (kDebugMode) {
+        print('Cannot play repeat audio - conditions not met');
+      }
     }
   }
 
   // Method to handle incoming translation audio
   void _handleTranslationAudio(Uint8List audioData) {
+    if (kDebugMode) {
+      print(
+          'Received audio chunk: ${audioData.length} bytes, audioEngine: ${audioEngine != null ? "initialized" : "null"}');
+    }
+
+    // Check if audio engine is available
+    if (audioEngine == null) {
+      if (kDebugMode) {
+        print('Audio engine is null - cannot play audio');
+      }
+      return;
+    }
+
     if (!_isPlayingTranslation) {
       // Start new translation playback
       setState(() {
@@ -633,8 +661,12 @@ class TranslationAppState extends State<TranslationApp> {
         _lastTranslationAudio = [audioData]; // Initialize with first chunk
       });
 
+      if (kDebugMode) {
+        print('Starting new translation playback');
+      }
+
       // Play the first audio chunk
-      audioEngine?.queueChunk(audioData);
+      audioEngine!.queueChunk(audioData);
 
       // Set a timer to reset the playing state
       Timer(const Duration(milliseconds: 3000), () {
@@ -647,8 +679,13 @@ class TranslationAppState extends State<TranslationApp> {
     } else {
       // Translation is already playing - add chunk to storage AND play it
       _lastTranslationAudio.add(audioData);
+
+      if (kDebugMode) {
+        print('Adding chunk to existing translation playback');
+      }
+
       // Continue playing subsequent chunks of the same translation
-      audioEngine?.queueChunk(audioData);
+      audioEngine!.queueChunk(audioData);
     }
   }
 
