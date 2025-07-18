@@ -45,7 +45,7 @@ class WebsocketService {
         try {
           // Add timeout to prevent hanging
           await _channel!.ready.timeout(
-            const Duration(seconds: 30),
+            const Duration(seconds: 365000),
             onTimeout: () {
               lastError = WebSocketError(WebSocketErrorType.connectionTimeout,
                   'Connection timed out after 30 seconds');
