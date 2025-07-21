@@ -1,6 +1,7 @@
 import 'package:audio_recorder/models/api_response.dart';
 import 'package:audio_recorder/models/websocket_config.dart';
 import 'package:audio_recorder/pages/login_page.dart';
+import 'package:audio_recorder/pages/main_page.dart';
 import 'package:flutter/material.dart';
 
 void main() async {
@@ -39,7 +40,7 @@ class MyApp extends StatelessWidget {
           dynamicSchemeVariant: DynamicSchemeVariant.monochrome,
         ),
       ),
-      home: LoginScreen(),
+      home: TranslationApp(),
     );
   }
 }

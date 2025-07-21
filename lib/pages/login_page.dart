@@ -4,6 +4,7 @@ import 'package:audio_recorder/pages/main_page.dart';
 import 'package:audio_recorder/pages/voice_cloning.dart';
 import 'package:audio_recorder/services/api_service.dart';
 import 'package:audio_recorder/services/storage_service.dart';
+import 'package:audio_recorder/utils.dart';
 import 'package:flutter/material.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -33,6 +34,8 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _showLoginForm = false;
   bool _showSignupForm = false;
   bool _isLoading = false;
+
+  final ErrorLogger _errorLogger = ErrorLogger();
 
   @override
   void initState() {
@@ -99,11 +102,10 @@ class _LoginScreenState extends State<LoginScreen> {
               await StorageService.saveApiUrl(_baseUrlController.text);
               if (mounted) {
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('API URL updated successfully'),
-                    duration: Duration(seconds: 2),
-                  ),
+                ErrorLogger.showError(
+                  context,
+                  'API URL updated successfully',
+                  duration: const Duration(seconds: 2),
                 );
               }
             },
@@ -326,10 +328,21 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       }
     } on APIError catch (e) {
+      _errorLogger.logError(e.message,
+          severity: ErrorSeverity.high, source: 'Authentication', error: e);
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message)),
-        );
+        ErrorLogger.showError(context, 'Authentication error: ${e.message}',
+            technicalError: e);
+      }
+    } catch (e) {
+      _errorLogger.logError('Unexpected authentication error',
+          severity: ErrorSeverity.critical, source: 'Authentication', error: e);
+
+      if (mounted) {
+        ErrorLogger.showError(context,
+            'Unexpected error during authentication. Please try again.',
+            technicalError: e);
       }
     } finally {
       if (mounted) {

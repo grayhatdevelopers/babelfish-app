@@ -13,6 +13,13 @@ class StorageService {
   static const _apiUrlKey = 'api_base_url';
   // Constants for WebSocket URL
   static const _websocketUrlKey = 'websocket_url';
+  // Constants for language preferences
+  static const _topLanguageKey = 'top_language';
+  static const _bottomLanguageKey = 'bottom_language';
+  // Constants for app settings
+  static const _fullSentenceModeKey = 'full_sentence_mode';
+  static const _showOriginalTextKey = 'show_original_text';
+  static const _showSpokenTextKey = 'show_spoken_text';
 
   static Future<void> saveToken(
     String username,
@@ -85,5 +92,50 @@ class StorageService {
   // Get WebSocket URL
   static Future<String?> getWebsocketUrl() async {
     return await _storage.read(key: _websocketUrlKey);
+  }
+
+  // Language preference methods
+  static Future<void> saveTopLanguagePreference(String language) async {
+    await _storage.write(key: _topLanguageKey, value: language);
+  }
+
+  static Future<String?> getTopLanguage() async {
+    return await _storage.read(key: _topLanguageKey);
+  }
+
+  static Future<void> saveBottomLanguagePreference(String language) async {
+    await _storage.write(key: _bottomLanguageKey, value: language);
+  }
+
+  static Future<String?> getBottomLanguage() async {
+    return await _storage.read(key: _bottomLanguageKey);
+  }
+
+  // App settings methods
+  static Future<void> saveFullSentenceMode(bool enabled) async {
+    await _storage.write(key: _fullSentenceModeKey, value: enabled.toString());
+  }
+
+  static Future<bool> getFullSentenceMode() async {
+    final value = await _storage.read(key: _fullSentenceModeKey);
+    return value == 'true';
+  }
+
+  static Future<void> saveShowOriginalText(bool enabled) async {
+    await _storage.write(key: _showOriginalTextKey, value: enabled.toString());
+  }
+
+  static Future<bool> getShowOriginalText() async {
+    final value = await _storage.read(key: _showOriginalTextKey);
+    return value != 'false'; // Default to true if not set
+  }
+
+  static Future<void> saveShowSpokenText(bool enabled) async {
+    await _storage.write(key: _showSpokenTextKey, value: enabled.toString());
+  }
+
+  static Future<bool> getShowSpokenText() async {
+    final value = await _storage.read(key: _showSpokenTextKey);
+    return value != 'false'; // Default to true if not set
   }
 }
