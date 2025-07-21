@@ -118,10 +118,6 @@ class TranslationAppState extends State<TranslationApp> {
   final ErrorLogger _errorLogger = ErrorLogger();
   dynamic _technicalErrorDetails;
 
-  // Add variables for swipe notification
-  bool _showSwipeNotification = false;
-  Timer? _swipeNotificationTimer;
-
   // Add variables for text editing
   bool _isEditingOriginalText = false;
   TextEditingController _originalTextController = TextEditingController();
@@ -338,7 +334,6 @@ class TranslationAppState extends State<TranslationApp> {
     destroyAudioEngine();
     _websocketService?.dispose(); // Dispose the WebSocket service properly
     _errorDisplayTimer?.cancel();
-    _swipeNotificationTimer?.cancel();
 
     // Clean up VAD subscriptions
     _speechStartSubscription?.cancel();
@@ -394,7 +389,6 @@ class TranslationAppState extends State<TranslationApp> {
                   _toggleSectionExpansion(dragDistance > 0);
                 } else {
                   _stopRecording();
-                  _showSwipeInstructions();
                 }
               });
             },
@@ -446,31 +440,6 @@ class TranslationAppState extends State<TranslationApp> {
                     icon: const Icon(Icons.settings),
                   ),
                 ),
-
-                // Add swipe notification overlay with tap to dismiss
-                if (_showSwipeNotification &&
-                    !isExpandedTop &&
-                    !isExpandedBottom)
-                  Positioned(
-                    top: 0,
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    child: GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _showSwipeNotification = false;
-                        });
-                        _swipeNotificationTimer?.cancel();
-                      },
-                      child: Container(
-                        color: Colors.black.withOpacity(0.3),
-                        child: Center(
-                          child: _buildSwipeNotification(),
-                        ),
-                      ),
-                    ),
-                  ),
               ],
             ),
           ),
@@ -755,7 +724,7 @@ class TranslationAppState extends State<TranslationApp> {
           translatedText = '🔄 Retranslating...';
         });
 
-        // Send corrected text for retranslation
+        // Send corrected text for retranslation (now async)
         _retranslateText(correctedText);
 
         if (kDebugMode) {
@@ -769,16 +738,51 @@ class TranslationAppState extends State<TranslationApp> {
     }
   }
 
-  // Add method to handle retranslation
-  void _retranslateText(String correctedText) {
+  // Add method to handle retranslation with automatic reconnection
+  Future<void> _retranslateText(String correctedText) async {
+    // Check if WebSocket is connected, if not, try to reconnect
+    if (_websocketService == null || !_websocketService!.isWebSocketConnected) {
+      if (kDebugMode) {
+        print(
+            'WebSocket not connected, attempting to reconnect for retranslation...');
+      }
+
+      setState(() {
+        translatedText = '🔄 Reconnecting...';
+      });
+
+      // Try to reconnect
+      final connected = await _connectWebSocket();
+      if (!connected) {
+        setState(() {
+          translatedText = '⚠️ Connection failed - please try again';
+        });
+
+        // Reset after a delay
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted) {
+            setState(() {
+              translatedText = '';
+            });
+          }
+        });
+        return;
+      }
+
+      // Update UI to show retranslating after successful reconnection
+      setState(() {
+        translatedText = '🔄 Retranslating...';
+      });
+    }
+
     if (_websocketService != null && _websocketService!.isWebSocketConnected) {
       // Send the corrected text to the websocket for retranslation
+      // Using the message format expected by the server
       final message = {
-        'type': 'retranslate',
+        'type': 'retranslatetext',
         'text': correctedText,
-        'from_language': isExpandedTop ? bottomLanguage : topLanguage,
-        'to_language': isExpandedTop ? topLanguage : bottomLanguage,
-        'user_id': userID,
+        'targetLanguage': isExpandedTop ? topLanguage : bottomLanguage,
+        'userID': userID ?? 'ronaldo',
       };
 
       // Convert the message to JSON string
@@ -789,7 +793,7 @@ class TranslationAppState extends State<TranslationApp> {
         print('Sent retranslation request: $messageJson');
       }
     } else {
-      // Fallback: show error message
+      // Final fallback: show error message
       setState(() {
         translatedText = '⚠️ Connection error - please try again';
       });
@@ -817,249 +821,6 @@ class TranslationAppState extends State<TranslationApp> {
         });
       }
     });
-  }
-
-  void _showSwipeInstructions() {
-    setState(() {
-      _showSwipeNotification = true;
-    });
-
-    _swipeNotificationTimer?.cancel();
-    _swipeNotificationTimer = Timer(const Duration(seconds: 6), () {
-      if (mounted) {
-        setState(() {
-          _showSwipeNotification = false;
-        });
-      }
-    });
-  }
-
-  Widget _buildSwipeNotification() {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0.0, end: 1.0),
-      duration: const Duration(milliseconds: 500),
-      curve: Curves.elasticOut,
-      builder: (context, value, child) {
-        return Transform.scale(
-          scale: 0.8 + (0.2 * value),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-            margin: const EdgeInsets.symmetric(horizontal: 24),
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.92),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.2),
-                width: 1,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.4),
-                  blurRadius: 20,
-                  offset: const Offset(0, 8),
-                  spreadRadius: 2,
-                ),
-                BoxShadow(
-                  color: Colors.white.withOpacity(0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, -2),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Header with pulsing animation
-                TweenAnimationBuilder<double>(
-                  tween: Tween(begin: 0.8, end: 1.0),
-                  duration: const Duration(milliseconds: 800),
-                  curve: Curves.easeInOut,
-                  builder: (context, pulseValue, child) {
-                    return Transform.scale(
-                      scale: pulseValue,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(25),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.touch_app,
-                              color: Colors.white,
-                              size: 28,
-                            ),
-                            const SizedBox(width: 12),
-                            Text(
-                              'Choose Language',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 32),
-
-                // Vertical instructions layout
-                Column(
-                  children: [
-                    // Top language instruction
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.1),
-                          width: 1,
-                        ),
-                      ),
-                      child: Column(
-                        children: [
-                          TweenAnimationBuilder<double>(
-                            tween: Tween(begin: 0.0, end: -10.0),
-                            duration: const Duration(milliseconds: 1000),
-                            curve: Curves.easeInOut,
-                            builder: (context, offset, child) {
-                              return Transform.translate(
-                                offset: Offset(0, offset * value),
-                                child: Icon(
-                                  Icons.keyboard_arrow_down,
-                                  color: Colors.white,
-                                  size: 40,
-                                ),
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'SWIPE DOWN',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.2,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'for ${Languages.languages[topLanguage]?.name ?? 'Top Language'}',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.8),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    // Divider with animation
-                    Container(
-                      height: 1,
-                      width: 60,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Colors.transparent,
-                            Colors.white.withOpacity(0.3),
-                            Colors.transparent,
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    // Bottom language instruction
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.1),
-                          width: 1,
-                        ),
-                      ),
-                      child: Column(
-                        children: [
-                          TweenAnimationBuilder<double>(
-                            tween: Tween(begin: 0.0, end: 10.0),
-                            duration: const Duration(milliseconds: 1000),
-                            curve: Curves.easeInOut,
-                            builder: (context, offset, child) {
-                              return Transform.translate(
-                                offset: Offset(0, offset * value),
-                                child: Icon(
-                                  Icons.keyboard_arrow_up,
-                                  color: Colors.white,
-                                  size: 40,
-                                ),
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'SWIPE UP',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.2,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'for ${Languages.languages[bottomLanguage]?.name ?? 'Bottom Language'}',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.8),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 24),
-
-                // Dismiss hint with fade animation
-                Opacity(
-                  opacity: 0.6 + (0.4 * value),
-                  child: Text(
-                    'Tap anywhere to dismiss',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.5),
-                      fontSize: 12,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
   }
 
   void _stopRecording() {
