@@ -305,7 +305,16 @@ class TranslationAppState extends State<TranslationApp> {
       if (kDebugMode) {
         print('VAD: Speech ended - will stop sending audio chunks');
       }
-      // Clear pending chunks when speech ends
+      
+      // Process any final audio chunks for translation
+      if (_pendingAudioChunks.isNotEmpty &&
+          _websocketService != null &&
+          (_websocketService?.isWebSocketConnected ?? false)) {
+        // Send any remaining chunks to complete the translation
+        _sendPendingChunks();
+      }
+
+      // Clear pending chunks after sending them
       _pendingAudioChunks.clear();
     });
 
@@ -340,7 +349,7 @@ class TranslationAppState extends State<TranslationApp> {
       }
 
       for (final chunk in _pendingAudioChunks) {
-        // Fix: Ensure we're calling the correct method with proper parameters
+        // Ensure we're calling the correct method with proper parameters
         _websocketService!
             .sendData(_sampleRate, userID ?? 'ronaldo', targetLanguage, chunk);
       }
@@ -865,10 +874,8 @@ class TranslationAppState extends State<TranslationApp> {
           ),
         ],
         
-        // Toggle button section for top display (only show if expanded)
-        if (isExpandedTop &&
-            _hasTranslationToPlay &&
-            _lastTranslatedText.isNotEmpty) ...[
+        // Toggle button section for top display
+        if (isExpandedTop) ...[
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -885,14 +892,18 @@ class TranslationAppState extends State<TranslationApp> {
                     ),
                     label: Text(
                       _isToggleListeningActive
-                          ? 'Stop Listening'
+                          ? 'Stop Listening & Translate'
                           : 'Start Listening',
                       style: const TextStyle(fontSize: 12, color: Colors.white),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _isToggleListeningActive
-                          ? Colors.red.withOpacity(0.8)
-                          : Colors.green.withOpacity(0.8),
+                          ? _vadDetectedSpeech
+                              ? Colors.green.withOpacity(
+                                  0.8) // Active and speech detected
+                              : Colors.red
+                                  .withOpacity(0.8) // Active but no speech
+                          : Colors.blue.withOpacity(0.8), // Not active
                       elevation: 2,
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 6),
@@ -1236,10 +1247,8 @@ class TranslationAppState extends State<TranslationApp> {
           ),
         ],
         
-        // Toggle button section for bottom display (only show if expanded)
-        if (isExpandedBottom &&
-            _hasTranslationToPlay &&
-            _lastTranslatedText.isNotEmpty) ...[
+        // Toggle button section for bottom display
+        if (isExpandedBottom) ...[
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1256,14 +1265,18 @@ class TranslationAppState extends State<TranslationApp> {
                     ),
                     label: Text(
                       _isToggleListeningActive
-                          ? 'Stop Listening'
+                          ? 'Stop Listening & Translate'
                           : 'Start Listening',
                       style: const TextStyle(fontSize: 12, color: Colors.white),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _isToggleListeningActive
-                          ? Colors.red.withOpacity(0.8)
-                          : Colors.green.withOpacity(0.8),
+                          ? _vadDetectedSpeech
+                              ? Colors.green.withOpacity(
+                                  0.8) // Active and speech detected
+                              : Colors.red
+                                  .withOpacity(0.8) // Active but no speech
+                          : Colors.blue.withOpacity(0.8), // Not active
                       elevation: 2,
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 6),
@@ -1432,7 +1445,7 @@ class TranslationAppState extends State<TranslationApp> {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(
-                                  'Saving top language preference: $langCode (was: $oldLanguage)',
+                                  'Saving top language preference: $langCode',
                                   style: TextStyle(fontSize: 12),
                                 ),
                                 duration: Duration(seconds: 2),
@@ -1451,20 +1464,6 @@ class TranslationAppState extends State<TranslationApp> {
                             print("VERIFIED SAVED TOP LANGUAGE: $savedTopLang");
                           }
 
-                          // Show verification log on screen
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'Verified saved top language: $savedTopLang',
-                                  style: TextStyle(fontSize: 12),
-                                ),
-                                duration: Duration(seconds: 2),
-                                backgroundColor: Colors.green.withOpacity(0.8),
-                              ),
-                            );
-                          }
-
                           // Update current language if top section is active
                           if (isExpandedTop &&
                               Languages.languages.containsKey(langCode)) {
@@ -1472,21 +1471,6 @@ class TranslationAppState extends State<TranslationApp> {
                             if (kDebugMode) {
                               print(
                                   "UPDATED CURRENT LANGUAGE TO: ${currentLanguage.name} (TOP ACTIVE)");
-                            }
-
-                            // Show current language update log on screen
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    'Updated current language to: ${currentLanguage.name} (TOP ACTIVE)',
-                                    style: TextStyle(fontSize: 12),
-                                  ),
-                                  duration: Duration(seconds: 2),
-                                  backgroundColor:
-                                      Colors.purple.withOpacity(0.8),
-                                ),
-                              );
                             }
                           }
                         } else {
@@ -1505,7 +1489,7 @@ class TranslationAppState extends State<TranslationApp> {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(
-                                  'Saving bottom language preference: $langCode (was: $oldLanguage)',
+                                  'Saving bottom language preference: $langCode',
                                   style: TextStyle(fontSize: 12),
                                 ),
                                 duration: Duration(seconds: 2),
@@ -1524,20 +1508,6 @@ class TranslationAppState extends State<TranslationApp> {
                             print("VERIFIED SAVED LANGUAGE: $savedLang");
                           }
 
-                          // Show verification log on screen
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'Verified saved bottom language: $savedLang',
-                                  style: TextStyle(fontSize: 12),
-                                ),
-                                duration: Duration(seconds: 2),
-                                backgroundColor: Colors.green.withOpacity(0.8),
-                              ),
-                            );
-                          }
-
                           // Update current language if bottom section is active
                           if (isExpandedBottom &&
                               Languages.languages.containsKey(langCode)) {
@@ -1546,24 +1516,13 @@ class TranslationAppState extends State<TranslationApp> {
                               print(
                                   "UPDATED CURRENT LANGUAGE TO: ${currentLanguage.name} (BOTTOM ACTIVE)");
                             }
-
-                            // Show current language update log on screen
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    'Updated current language to: ${currentLanguage.name} (BOTTOM ACTIVE)',
-                                    style: TextStyle(fontSize: 12),
-                                  ),
-                                  duration: Duration(seconds: 2),
-                                  backgroundColor:
-                                      Colors.purple.withOpacity(0.8),
-                                ),
-                              );
-                            }
                           }
                         }
+                        
                         Navigator.pop(context);
+                        
+                        // Important: Do NOT automatically start listening after language selection
+                        // Let the user explicitly press the Start Listening button
                       },
                     );
                   },
@@ -1583,6 +1542,14 @@ class TranslationAppState extends State<TranslationApp> {
     if (_stoppingListeningOnly) {
       if (kDebugMode) {
         print('Ignoring audio chunk as stopping flag is active');
+      }
+      return;
+    }
+
+    // Check if we're actively listening - only process audio if toggle listening is active
+    if (!_isToggleListeningActive && !isExpandedTop && !isExpandedBottom) {
+      if (kDebugMode) {
+        print('Ignoring audio chunk as toggle listening is not active');
       }
       return;
     }
@@ -1637,7 +1604,7 @@ class TranslationAppState extends State<TranslationApp> {
           print('VAD: Sending chunk to server (speech detected)');
         }
         
-        // Fix: Ensure we're calling the correct method with proper parameters
+        // Ensure we're calling the correct method with proper parameters
         _websocketService!
             .sendData(_sampleRate, userID ?? 'ronaldo', targetLanguage, chunk);
       } else {
@@ -2494,12 +2461,13 @@ Message: ${technicalError.message}
     );
   }
 
-  // Modify the _toggleListening method to ensure WebSocket is properly initialized and connected
+  // Fixed toggle listening button - fix setState error
   void _toggleListening() async {
     if (_isToggleListeningActive) {
       // Stop listening
       setState(() {
-        _isToggleListeningActive = false;
+        _isToggleListeningActive =
+            false; // Correctly set to false when stopping
       });
 
       // Stop VAD listening
@@ -2521,6 +2489,9 @@ Message: ${technicalError.message}
 
         // Send pending chunks to ensure final words are processed
         _sendPendingChunks();
+        
+        // Wait a moment for server to process the final audio chunks
+        await Future.delayed(Duration(milliseconds: 500));
       }
 
       // Stop recording in a way that preserves ongoing playback
@@ -2549,12 +2520,15 @@ Message: ${technicalError.message}
       // Show confirmation
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Listening stopped (translations will continue)'),
+          content: Text('Listening stopped - translating...'),
           duration: Duration(seconds: 1),
           backgroundColor: Colors.orange,
         ),
       );
     } else {
+      // Reset texts when starting a new listening session
+      _resetTexts();
+      
       // Clear the stopping flag when starting listening again
       _stoppingListeningOnly = false;
 
@@ -2663,9 +2637,12 @@ Message: ${technicalError.message}
         }
       }
 
-      // Start connecting when section is expanded
-      if (isExpandedTop || isExpandedBottom) {
-        _startConnectionProcess();
+      // Important: Do NOT automatically start connection process
+      // Let the user explicitly press the Start Listening button
+
+      // Stop any ongoing recording/listening when switching sections
+      if (isRecording || isListening) {
+        _stopRecording();
       }
     });
   }

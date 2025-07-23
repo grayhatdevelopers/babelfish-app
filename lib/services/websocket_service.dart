@@ -207,9 +207,11 @@ class WebsocketService {
         
         // Create metadata JSON
         Map<String, dynamic> metadata = {
-          'sampleRate': sampleRate, // Use actual sample rate
+          'sampleRate': sampleRate,
           'userID': userID,
-          'targetLanguage': targetLanguage
+          'targetLanguage': targetLanguage,
+          'timestamp': DateTime.now()
+              .millisecondsSinceEpoch, // Add timestamp for server tracking
         };
 
         String metadataJson = jsonEncode(metadata);
@@ -228,9 +230,9 @@ class WebsocketService {
         // Send to WebSocket server
         _channel!.sink.add(payload);
         
-        // Add a delay to ensure WebSocket doesn't get overwhelmed
+        // Add a very small delay to ensure WebSocket doesn't get overwhelmed
         // We don't need to await this since we don't want to block the audio sending
-        Future.delayed(Duration(milliseconds: 10));
+        Future.delayed(Duration(milliseconds: 5));
       } catch (e) {
         if (kDebugMode) {
           print("Failed to send chunk with metadata: $e");

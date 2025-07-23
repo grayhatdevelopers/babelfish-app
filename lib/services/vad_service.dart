@@ -113,16 +113,16 @@ class VadService {
   /// Start VAD listening with configurable parameters
   Future<bool> startListening({
     double positiveSpeechThreshold =
-        0.8, // Increased from 0.5 for better sensitivity
+        0.9, // Increased from 0.8 for better precision
     double negativeSpeechThreshold =
-        0.3, // Reduced from 0.35 for better detection
-    int preSpeechPadFrames = 1,
+        0.2, // Reduced from 0.3 for better silence detection
+    int preSpeechPadFrames =
+        2, // Increased from 1 for better speech beginning detection
     int redemptionFrames =
-        10, // Increased from 8 for better continuous detection
+        12, // Increased from 10 for better speech continuation
     int frameSamples = 1536,
-    int minSpeechFrames = 2, // Reduced from 3 for faster detection
-    bool submitUserSpeechOnPause =
-        true, // Changed to true to ensure speech is processed when paused
+    int minSpeechFrames = 2,
+    bool submitUserSpeechOnPause = true,
     String model = 'legacy',
   }) async {
     if (!_isInitialized || _vadHandler == null) {
