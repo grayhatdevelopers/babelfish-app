@@ -96,6 +96,7 @@ class VadService {
     });
 
     _vadHandler!.onFrameProcessed.listen((frameData) {
+      // Add frame data to stream
       _frameProcessedController.add({
         'isSpeech': frameData.isSpeech,
         'notSpeech': frameData.notSpeech,
@@ -111,13 +112,17 @@ class VadService {
 
   /// Start VAD listening with configurable parameters
   Future<bool> startListening({
-    double positiveSpeechThreshold = 0.5,
-    double negativeSpeechThreshold = 0.35,
+    double positiveSpeechThreshold =
+        0.8, // Increased from 0.5 for better sensitivity
+    double negativeSpeechThreshold =
+        0.3, // Reduced from 0.35 for better detection
     int preSpeechPadFrames = 1,
-    int redemptionFrames = 8,
+    int redemptionFrames =
+        10, // Increased from 8 for better continuous detection
     int frameSamples = 1536,
-    int minSpeechFrames = 3,
-    bool submitUserSpeechOnPause = false,
+    int minSpeechFrames = 2, // Reduced from 3 for faster detection
+    bool submitUserSpeechOnPause =
+        true, // Changed to true to ensure speech is processed when paused
     String model = 'legacy',
   }) async {
     if (!_isInitialized || _vadHandler == null) {

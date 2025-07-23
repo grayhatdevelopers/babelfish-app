@@ -38,8 +38,14 @@ class WebsocketService {
   // Expose the error stream
   Stream<WebSocketError> get errorStream => _errorStreamController.stream;
 
+  // Add variable to track the last connected URL
+  String? _lastConnectedUrl;
+
   Future<bool> connect(String url) async {
     try {
+      // Store URL for potential reconnection
+      _lastConnectedUrl = url;
+      
       _channel = WebSocketChannel.connect(Uri.parse(url));
       if (_channel != null) {
         try {
@@ -191,8 +197,14 @@ class WebsocketService {
 
   void sendData(double sampleRate, String userID, String targetLanguage,
       Uint8List chunk) {
-    if (_channel != null) {
+    if (_channel != null && isWebSocketConnected) {
       try {
+        // Log the sending of data
+        if (kDebugMode) {
+          print(
+              "Sending audio chunk: ${chunk.length} bytes, target language: $targetLanguage");
+        }
+        
         // Create metadata JSON
         Map<String, dynamic> metadata = {
           'sampleRate': sampleRate, // Use actual sample rate
@@ -215,18 +227,49 @@ class WebsocketService {
 
         // Send to WebSocket server
         _channel!.sink.add(payload);
+        
+        // Add a delay to ensure WebSocket doesn't get overwhelmed
+        // We don't need to await this since we don't want to block the audio sending
+        Future.delayed(Duration(milliseconds: 10));
       } catch (e) {
         if (kDebugMode) {
           print("Failed to send chunk with metadata: $e");
+          ErrorLogger().logError('Failed to send audio chunk',
+              severity: ErrorSeverity.medium,
+              source: 'WebSocket Service',
+              error: e);
         }
         lastError = WebSocketError(WebSocketErrorType.messageSendFailed,
             'Failed to send audio data: ${e.toString()}');
         _errorStreamController.add(lastError!);
       }
     } else {
+      if (kDebugMode) {
+        print("Cannot send audio data: WebSocket not connected or null");
+      }
       lastError = WebSocketError(WebSocketErrorType.messageSendFailed,
           'Cannot send audio data: WebSocket not connected');
       _errorStreamController.add(lastError!);
+      
+      // Attempt to reconnect automatically when sending fails due to connection issues
+      if (_channel == null || !isWebSocketConnected) {
+        _attemptReconnect();
+      }
+    }
+  }
+
+  // Add a method to attempt reconnection
+  Future<void> _attemptReconnect() async {
+    if (!isWebSocketConnected && _channel == null) {
+      if (kDebugMode) {
+        print("Attempting to reconnect WebSocket automatically...");
+      }
+
+      // Use the last URL if available
+      final reconnectUrl = _lastConnectedUrl;
+      if (reconnectUrl != null) {
+        await connect(reconnectUrl);
+      }
     }
   }
 

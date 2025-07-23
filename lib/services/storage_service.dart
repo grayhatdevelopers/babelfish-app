@@ -20,6 +20,11 @@ class StorageService {
   static const _fullSentenceModeKey = 'full_sentence_mode';
   static const _showOriginalTextKey = 'show_original_text';
   static const _showSpokenTextKey = 'show_spoken_text';
+  // Constant for toggle listening mode
+  static const _toggleListeningModeKey = 'toggle_listening_mode';
+  // Constants for auto-stop feature
+  static const _autoStopAfterSpeechKey = 'auto_stop_after_speech';
+  static const _autoStopDelayKey = 'auto_stop_delay_seconds';
 
   static Future<void> saveToken(
     String username,
@@ -137,5 +142,38 @@ class StorageService {
   static Future<bool> getShowSpokenText() async {
     final value = await _storage.read(key: _showSpokenTextKey);
     return value != 'false'; // Default to true if not set
+  }
+  
+  // Toggle listening mode methods
+  static Future<void> saveToggleListeningMode(bool enabled) async {
+    await _storage.write(
+        key: _toggleListeningModeKey, value: enabled.toString());
+  }
+
+  static Future<bool> getToggleListeningMode() async {
+    final value = await _storage.read(key: _toggleListeningModeKey);
+    return value == 'true'; // Default to false if not set
+  }
+
+  // Auto-stop after speech ends methods
+  static Future<void> saveAutoStopAfterSpeech(bool enabled) async {
+    await _storage.write(
+        key: _autoStopAfterSpeechKey, value: enabled.toString());
+  }
+
+  static Future<bool> getAutoStopAfterSpeech() async {
+    final value = await _storage.read(key: _autoStopAfterSpeechKey);
+    return value == 'true'; // Default to false if not set
+  }
+
+  // Auto-stop delay methods
+  static Future<void> saveAutoStopDelay(int delaySeconds) async {
+    await _storage.write(
+        key: _autoStopDelayKey, value: delaySeconds.toString());
+  }
+
+  static Future<int> getAutoStopDelay() async {
+    final value = await _storage.read(key: _autoStopDelayKey);
+    return value != null ? int.tryParse(value) ?? 2 : 2; // Default to 2 seconds
   }
 }
