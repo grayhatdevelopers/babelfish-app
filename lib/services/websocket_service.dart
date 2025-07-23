@@ -46,6 +46,13 @@ class WebsocketService {
       // Store URL for potential reconnection
       _lastConnectedUrl = url;
       
+      // If already connected, close first to ensure clean state
+      if (_channel != null || isWebSocketConnected) {
+        await close();
+        // Small delay to ensure clean close
+        await Future.delayed(Duration(milliseconds: 50));
+      }
+      
       _channel = WebSocketChannel.connect(Uri.parse(url));
       if (_channel != null) {
         try {
@@ -60,6 +67,9 @@ class WebsocketService {
             },
           );
           isWebSocketConnected = true;
+          if (kDebugMode) {
+            print("WebSocket connected successfully");
+          }
           return true;
         } catch (e) {
           if (kDebugMode) {

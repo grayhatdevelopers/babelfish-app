@@ -124,13 +124,24 @@ class VadService {
     int minSpeechFrames = 2,
     bool submitUserSpeechOnPause = true,
     String model = 'legacy',
+    bool forceRestart = true, // Add parameter to force restart
   }) async {
     if (!_isInitialized || _vadHandler == null) {
       _errorController.add('VAD service not initialized');
       return false;
     }
 
-    if (_isListening) {
+    // If already listening and forceRestart is true, stop first
+    if (_isListening && forceRestart) {
+      try {
+        await stopListening();
+        // Small delay to ensure clean state
+        await Future.delayed(Duration(milliseconds: 50));
+      } catch (e) {
+        debugPrint('Error stopping VAD before restart: $e');
+        // Continue anyway
+      }
+    } else if (_isListening) {
       debugPrint('VAD is already listening');
       return true;
     }
@@ -170,6 +181,16 @@ class VadService {
     }
 
     try {
+      // Force end any ongoing speech detection by emitting end event manually
+      try {
+        debugPrint('VAD Iterator: Forcing speech end.');
+        // This will simulate speech ending to clean up any ongoing processing
+        _speechEndController.add([]);
+      } catch (e) {
+        // Ignore errors from forcing speech end
+        debugPrint('Error forcing speech end event: $e');
+      }
+
       await _vadHandler!.stopListening();
       _isListening = false;
       debugPrint('VAD listening stopped');

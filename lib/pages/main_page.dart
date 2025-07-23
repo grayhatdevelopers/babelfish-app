@@ -2529,6 +2529,10 @@ Message: ${technicalError.message}
       // Reset texts when starting a new listening session
       _resetTexts();
       
+      // Important: Clear all previous state
+      _pendingAudioChunks.clear();
+      _vadDetectedSpeech = false;
+      
       // Clear the stopping flag when starting listening again
       _stoppingListeningOnly = false;
 
@@ -2540,6 +2544,10 @@ Message: ${technicalError.message}
 
       // Initialize audio engine if needed
       if (!isInitialized) {
+        await createAudioEngine(recorderEnabled: true);
+      } else {
+        // Re-initialize if already initialized to ensure clean state
+        await destroyAudioEngine();
         await createAudioEngine(recorderEnabled: true);
       }
 
@@ -2565,8 +2573,13 @@ Message: ${technicalError.message}
         }
       }
 
-      // Start VAD listening
+      // Start VAD listening with fresh state
       if (_vadInitialized) {
+        // Force stop any existing VAD session
+        await _vadService.stopListening();
+        await Future.delayed(Duration(milliseconds: 100));
+
+        // Start new VAD session
         await _vadService.startListening();
         if (kDebugMode) {
           print('VAD listening started by toggle');
